@@ -11,6 +11,8 @@ This emulator prioritizes clean, understandable code over raw performance optimi
 
 ## Features
 
+Cross-platform support Windows, macOS, or Linux (via Silk.NET)
+
 ### CPU
 - Complete implementation of all 256 base opcodes
 - Complete implementation of all 256 CB-prefixed (extended) opcodes
@@ -49,9 +51,19 @@ This emulator prioritizes clean, understandable code over raw performance optimi
 
 ## Requirements
 
-- [.NET 9.0 SDK](https://dotnet.microsoft.com/download/dotnet/9.0) or later
-- OpenGL-compatible graphics driver
-- OpenAL-compatible audio driver (optional, for sound)
+### Runtime Requirements
+- **.NET 9.0 Runtime** or SDK
+- **OpenGL 3.3** compatible graphics card
+- **OpenAL** compatible audio system
+- **Operating System**: Windows, macOS, or Linux (via Silk.NET)
+
+### Development Requirements
+- **.NET 9.0 SDK** - [Download here](https://dotnet.microsoft.com/download/dotnet/9.0)
+- **C# 13** compatible IDE (optional but recommended):
+  - Visual Studio 2022 (v17.12+)
+  - Visual Studio Code with C# Dev Kit
+  - JetBrains Rider 2024.3+
+- **Git** - For cloning the repository
 
 ## Building
 
