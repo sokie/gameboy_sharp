@@ -30,9 +30,11 @@ namespace GameboySharp
         private int _bufferIndex = 0;
         private int _apuCycleCounter = 0;
 
-        // Audio Processing State ---
-        private float _dcBlockStateLeft = 0.0f;
-        private float _dcBlockStateRight = 0.0f;
+        // Audio Processing State (DC blocking filter) ---
+        private float _dcBlockPrevXLeft = 0.0f;
+        private float _dcBlockPrevYLeft = 0.0f;
+        private float _dcBlockPrevXRight = 0.0f;
+        private float _dcBlockPrevYRight = 0.0f;
 
         // --- APU Sound Channels ---
         private PulseWithSweepChannel _channel1; // Pulse A (with sweep)
@@ -136,41 +138,38 @@ namespace GameboySharp
                 // 2. Mix samples for left and right outputs based on NR51 register
                 float mixedLeft = 0.0f;
                 float mixedRight = 0.0f;
-                int leftChannelCount = 0;
-                int rightChannelCount = 0;
 
                 // Channel 1 (Pulse A)
-                if ((_nr51 & 0b00010000) != 0) { mixedLeft += sample1; leftChannelCount++; }
-                if ((_nr51 & 0b00000001) != 0) { mixedRight += sample1; rightChannelCount++; }
+                if ((_nr51 & 0b00010000) != 0) { mixedLeft += sample1; }
+                if ((_nr51 & 0b00000001) != 0) { mixedRight += sample1; }
 
                 // Channel 2 (Pulse B)
-                if ((_nr51 & 0b00100000) != 0) { mixedLeft += sample2; leftChannelCount++; }
-                if ((_nr51 & 0b00000010) != 0) { mixedRight += sample2; rightChannelCount++; }
+                if ((_nr51 & 0b00100000) != 0) { mixedLeft += sample2; }
+                if ((_nr51 & 0b00000010) != 0) { mixedRight += sample2; }
 
                 // Channel 3 (Wave)
-                if ((_nr51 & 0b01000000) != 0) { mixedLeft += sample3; leftChannelCount++; }
-                if ((_nr51 & 0b00000100) != 0) { mixedRight += sample3; rightChannelCount++; }
+                if ((_nr51 & 0b01000000) != 0) { mixedLeft += sample3; }
+                if ((_nr51 & 0b00000100) != 0) { mixedRight += sample3; }
 
                 // Channel 4 (Noise)
-                if ((_nr51 & 0b10000000) != 0) { mixedLeft += sample4; leftChannelCount++; }
-                if ((_nr51 & 0b00001000) != 0) { mixedRight += sample4; rightChannelCount++; }
+                if ((_nr51 & 0b10000000) != 0) { mixedLeft += sample4; }
+                if ((_nr51 & 0b00001000) != 0) { mixedRight += sample4; }
 
-                // 3. Average the mixed samples to prevent clipping
-                // This provides a much cleaner sound than simple summation.
-                float avgLeft = (leftChannelCount > 0) ? mixedLeft / leftChannelCount : 0.0f;
-                float avgRight = (rightChannelCount > 0) ? mixedRight / rightChannelCount : 0.0f;
+                // 3. Divide by fixed channel count (4) like real hardware
+                float avgLeft = mixedLeft / 4.0f;
+                float avgRight = mixedRight / 4.0f;
 
                 // 4. Apply master volume (NR50)
-                // The volume is 0-7, so we scale it to a 0.0-1.0 multiplier.
+                // Hardware maps volume 0-7 to multipliers 1-8
                 int leftVolume = ((_nr50 >> 4) & 0b00000111);
                 int rightVolume = (_nr50 & 0b00000111);
 
-                float processedLeft = avgLeft * (leftVolume / 7.0f);
-                float processedRight = avgRight * (rightVolume / 7.0f);
+                float processedLeft = avgLeft * ((leftVolume + 1) / 8.0f);
+                float processedRight = avgRight * ((rightVolume + 1) / 8.0f);
 
                 // 5. Apply DC blocking high-pass filter
-                processedLeft = DcBlock(processedLeft, ref _dcBlockStateLeft);
-                processedRight = DcBlock(processedRight, ref _dcBlockStateRight);
+                processedLeft = DcBlock(processedLeft, ref _dcBlockPrevXLeft, ref _dcBlockPrevYLeft);
+                processedRight = DcBlock(processedRight, ref _dcBlockPrevXRight, ref _dcBlockPrevYRight);
                 
                 // 6. Apply soft clipping to prevent harsh distortion
                 processedLeft = SoftClip(processedLeft);
@@ -320,17 +319,16 @@ namespace GameboySharp
 
         /// <summary>
         /// A high-pass filter to remove DC offset from the signal.
-        /// This prevents pops and clicks when sounds start or stop.
+        /// Standard DC blocker: y[n] = x[n] - x[n-1] + R * y[n-1]
         /// </summary>
-        private static float DcBlock(float x, ref float s)
+        internal static float DcBlock(float x, ref float prevX, ref float prevY)
         {
-            // ~20 Hz high-pass at 44.1 kHz
-            const float HpCoeff = 0.997f; 
-
-            // A common coefficient for a ~35Hz cutoff at 44.1kHz sample rate.
-            //const float HpCoeff = 0.995f; 
-            s = s * HpCoeff + x - s;
-            return x - s;
+            // R ≈ 0.997 gives ~20 Hz cutoff at 44.1 kHz
+            const float R = 0.997f;
+            float y = x - prevX + R * prevY;
+            prevX = x;
+            prevY = y;
+            return y;
         }
 
         /// <summary>

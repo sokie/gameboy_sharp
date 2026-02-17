@@ -142,10 +142,10 @@ namespace GameboySharp
             // Get duty pattern value
             int dutyValue = _dutyPatterns[_dutyCycle * 8 + _dutyPosition];
 
-            // Apply envelope
+            // Apply envelope and convert to bipolar [-1, 1]
             float sample = dutyValue * _envelopeVolume / 15.0f;
 
-            return sample;
+            return sample * 2.0f - 1.0f;
         }
 
         /// <summary>

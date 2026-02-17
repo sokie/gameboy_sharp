@@ -46,10 +46,10 @@ namespace GameboySharp
             // Get noise sample (inverted bit 0 of LFSR)
             int noiseSample = (~_lfsr) & 0x01;
 
-            // Apply envelope
+            // Apply envelope and convert to bipolar [-1, 1]
             float sample = noiseSample * _envelopeVolume / 15.0f;
 
-            return sample;
+            return sample * 2.0f - 1.0f;
         }
 
         /// <summary>

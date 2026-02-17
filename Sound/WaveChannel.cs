@@ -57,10 +57,10 @@ namespace GameboySharp
                 waveSample = 0; // Mute
             }
 
-            // Convert 4-bit sample to float [0.0, 1.0] to be consistent with other channels
+            // Convert 4-bit sample to bipolar [-1, 1]
             float sample = waveSample / 15.0f;
 
-            return sample;
+            return sample * 2.0f - 1.0f;
         }
 
         /// <summary>
