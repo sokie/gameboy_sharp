@@ -45,7 +45,7 @@ public class Program
         
         Log.Information("Starting main loop...");
         var frameTimer = Stopwatch.StartNew();
-        const double frameTimeMs = 1000.0 / 60.0; // Target 60 FPS
+        const double frameTimeMs = 1000.0 / GameboyConstants.FramesPerSecond;
 
         //while(true)
         while (!gameWindow.SilkWindow.IsClosing && !debugWindow.SilkWindow.IsClosing)

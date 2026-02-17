@@ -12,8 +12,8 @@ namespace GameboySharp
         // --- APU Timing and Constants ---
         private const int SampleRate = 44100;
 
-        // It's correct to always use base clock speed and not double speed for this. 
-        private const int CyclesPerSample = (int)(GameboyConstants.CpuClockSpeed / SampleRate);
+        // It's correct to always use base clock speed and not double speed for this.
+        private const double CyclesPerSample = GameboyConstants.CpuClockSpeed / SampleRate;
 
         // --- Frame Sequencer ---
         // The frame sequencer generates clocks for length, envelope, and sweep units.
@@ -28,7 +28,7 @@ namespace GameboySharp
         private short[] _leftChannelBuffer = new short[BufferSize];
         private short[] _rightChannelBuffer = new short[BufferSize];
         private int _bufferIndex = 0;
-        private int _apuCycleCounter = 0;
+        private double _apuCycleCounter = 0;
 
         // Audio Processing State (DC blocking filter) ---
         private float _dcBlockPrevXLeft = 0.0f;

@@ -11,8 +11,8 @@ namespace GameboySharp
         public const int ScreenHeight = 144;
 
         public const double CpuClockSpeed = 4194304; // 4.19 MHz
-        public const double FramesPerSecond = 59.7;
-        public const int CyclesPerFrame = (int)(CpuClockSpeed / FramesPerSecond); // ~70224
+        public const int CyclesPerFrame = 70224; // 154 scanlines × 456 T-cycles
+        public const double FramesPerSecond = CpuClockSpeed / CyclesPerFrame; // ~59.7275
     }
 
     internal class Emulator : IDisposable
@@ -125,14 +125,9 @@ namespace GameboySharp
                 Timer.Tick(machineCycles);
                 Apu.Step(machineCycles);
                 
-                if (cyclesThisFrame > 5) 
-                {
-                    AudioStreamerAL?.UpdateStream();
-                }
-
                 cyclesThisFrame += machineCycles;
             }
-            //AudioStreamerAL?.UpdateStream();
+            AudioStreamerAL?.UpdateStream();
         }
 
         private void InitializeHardwareForGbc()

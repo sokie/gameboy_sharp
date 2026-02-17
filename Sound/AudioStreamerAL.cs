@@ -20,6 +20,7 @@ namespace GameboySharp
         private readonly uint _source;
         private readonly uint[] _buffers;
         private readonly ConcurrentQueue<short> _audioQueue = new ConcurrentQueue<short>();
+        private readonly short[] _fillData = new short[FILL_CHUNK_SIZE_SAMPLES];
 
         private bool _streamHasStarted = false;
 
@@ -129,22 +130,20 @@ namespace GameboySharp
         
         private bool FillBuffer(uint buffer)
         {
-            int samplesToBuffer = Math.Min(_audioQueue.Count, FILL_CHUNK_SIZE_SAMPLES) & ~1;
-            if (samplesToBuffer == 0) return false;
+            if (_audioQueue.Count < FILL_CHUNK_SIZE_SAMPLES) return false;
 
-            short[] data = new short[samplesToBuffer];
-            for (int i = 0; i < samplesToBuffer; i++)
+            for (int i = 0; i < FILL_CHUNK_SIZE_SAMPLES; i++)
             {
-                if (!_audioQueue.TryDequeue(out data[i]))
+                if (!_audioQueue.TryDequeue(out _fillData[i]))
                 {
-                    Array.Clear(data, i, data.Length - i);
+                    Array.Clear(_fillData, i, FILL_CHUNK_SIZE_SAMPLES - i);
                     break;
                 }
             }
-            
-            fixed (short* ptr = data)
+
+            fixed (short* ptr = _fillData)
             {
-                _al.BufferData(buffer, AL_FORMAT, ptr, (int)(data.Length * sizeof(short)), SAMPLE_RATE);
+                _al.BufferData(buffer, AL_FORMAT, ptr, FILL_CHUNK_SIZE_SAMPLES * sizeof(short), SAMPLE_RATE);
             }
             CheckAlError($"BufferData on {buffer}");
             return true;
