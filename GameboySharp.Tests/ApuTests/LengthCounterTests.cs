@@ -1,6 +1,6 @@
 using Xunit;
 
-namespace GameboySharp.Tests.Apu;
+namespace GameboySharp.Tests.ApuTests;
 
 public class LengthCounterTests
 {

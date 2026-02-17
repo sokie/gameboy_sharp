@@ -60,7 +60,11 @@ namespace GameboySharp
                 _sweepCounter = (_sweepPeriod != 0) ? _sweepPeriod : 8;
 
                 int newFreq = CalculateSweepFrequency(_shadowFrequency);
-                if (newFreq <= 2047 && _sweepShift > 0)
+                if (newFreq > 2047)
+                {
+                    _enabled = false;
+                }
+                else if (_sweepShift > 0)
                 {
                     _frequency = newFreq;
                     _shadowFrequency = newFreq;
@@ -71,10 +75,6 @@ namespace GameboySharp
                     {
                         _enabled = false;
                     }
-                }
-                else
-                {
-                    _enabled = false;
                 }
             }
         }
