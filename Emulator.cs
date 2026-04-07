@@ -1,5 +1,6 @@
 // Emulator.cs
 using System.Text;
+using GameboySharp.Jit;
 using Serilog;
 using Silk.NET.Input;
 
@@ -25,6 +26,8 @@ namespace GameboySharp
 
         public readonly Apu Apu;
 
+        internal readonly JitCpu JitCpu;
+
         internal AudioStreamerAL? AudioStreamerAL;
         
         private bool _disposed = false;
@@ -48,6 +51,10 @@ namespace GameboySharp
              // Link components
             Cpu.SetMmu(Mmu);
             Ppu.SetMmu(Mmu);
+
+            // Initialize JIT
+            JitCpu = new JitCpu(Cpu, Mmu, Ppu, Timer, Apu);
+            Mmu.JitBlockCache = JitCpu.Cache;
 
             // Initialize audio with proper error handling
             try
@@ -116,15 +123,9 @@ namespace GameboySharp
                     return;
                 }
 
-                int cycles = Cpu.Step();
-
-                // PPU and Timer cycles are based on CPU speed mode
-                int machineCycles = Mmu.IsDoubleSpeedMode ? cycles / 2 : cycles;
-
-                Ppu.Step(machineCycles);
-                Timer.Tick(machineCycles);
-                Apu.Step(machineCycles);
-                
+                // JitCpu.Step() handles execution, per-instruction sync, and interrupts.
+                // Returns machine cycles (already adjusted for double-speed mode).
+                int machineCycles = JitCpu.Step();
                 cyclesThisFrame += machineCycles;
             }
             AudioStreamerAL?.UpdateStream();

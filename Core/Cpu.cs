@@ -46,17 +46,24 @@ namespace GameboySharp
         public bool FlagH { get { return (F & 0x20) != 0; } set { F = value ? (byte)(F | 0x20) : (byte)(F & ~0x20); } }
         public bool FlagC { get { return (F & 0x10) != 0; } set { F = value ? (byte)(F | 0x10) : (byte)(F & ~0x10); } }
 
-        private bool _interruptMasterEnable;
+        internal bool _interruptMasterEnable;
 
-        private int _enableInterruptsScheduled = 0; // For EI delay; 0 = no, >0 = countdown
+        internal int _enableInterruptsScheduled = 0; // For EI delay; 0 = no, >0 = countdown
 
-        private bool is_halted;
-        private bool halt_bug_active = false;
+        internal bool is_halted;
+        internal bool halt_bug_active = false;
+
+        // Internal properties for JIT access
+        internal bool InterruptMasterEnable { get => _interruptMasterEnable; set => _interruptMasterEnable = value; }
+        internal int EnableInterruptsScheduled => _enableInterruptsScheduled;
+        internal bool IsHalted { get => is_halted; set => is_halted = value; }
+        internal bool IsHaltBugActive { get => halt_bug_active; set => halt_bug_active = value; }
+        internal int HandleInterrupts() => handle_interrupts();
 
         // Opcode lookup table
-        private static readonly OpcodeInfo[] OpcodeTable = new OpcodeInfo[256];
+        internal static readonly OpcodeInfo[] OpcodeTable = new OpcodeInfo[256];
 
-        private static readonly OpcodeInfo[] ExtendedOpcodeTable = new OpcodeInfo[256];
+        internal static readonly OpcodeInfo[] ExtendedOpcodeTable = new OpcodeInfo[256];
 
         // 0xFFFF - Interrupt Enable Register
         public byte ie_register { get; set; }
@@ -1663,7 +1670,7 @@ namespace GameboySharp
             return ticks;
         }
 
-        private void ProcessScheduledInterruptEnable()
+        internal void ProcessScheduledInterruptEnable()
         {
             if (_enableInterruptsScheduled > 0)
             {
@@ -1848,7 +1855,7 @@ namespace GameboySharp
         }
 
         // Helper method for ADD operations
-        private void AddToA(byte value)
+        internal void AddToA(byte value)
         {
             int result = A + value;
 
@@ -1862,7 +1869,7 @@ namespace GameboySharp
         }
 
         // Helper method for SUB operations
-        private void SubFromA(byte value)
+        internal void SubFromA(byte value)
         {
             int result = A - value;
 
@@ -1876,7 +1883,7 @@ namespace GameboySharp
         }
 
         // Helper method for AND operations
-        private void AndWithA(byte value)
+        internal void AndWithA(byte value)
         {
             A &= value;
 
@@ -1888,7 +1895,7 @@ namespace GameboySharp
         }
 
         // Helper method for OR operations
-        private void OrWithA(byte value)
+        internal void OrWithA(byte value)
         {
             A |= value;
 
@@ -1899,7 +1906,7 @@ namespace GameboySharp
             FlagC = false;
         }
 
-        private bool Ret(bool flag)
+        internal bool Ret(bool flag)
         { 
             if (flag)
             {
@@ -1911,7 +1918,7 @@ namespace GameboySharp
         }
 
         // Helper method for XOR operations
-        private void XorWithA(byte value)
+        internal void XorWithA(byte value)
         {
             A ^= value;
 
@@ -1923,7 +1930,7 @@ namespace GameboySharp
         }
 
         // Helper method for CP operations (compare)
-        private void CompareWithA(byte value)
+        internal void CompareWithA(byte value)
         {
             int result = A - value;
 
@@ -1934,7 +1941,7 @@ namespace GameboySharp
             FlagC = result < 0;
         }
 
-        private byte RLC(byte b)
+        internal byte RLC(byte b)
         {
             byte result = (byte)((b << 1) | (b >> 7));
             FlagZ = result == 0;
@@ -1944,7 +1951,7 @@ namespace GameboySharp
             return result;
         }
 
-        private byte RRC(byte b)
+        internal byte RRC(byte b)
         {
             byte result = (byte)((b >> 1) | (b << 7));
             FlagZ = result == 0;
@@ -1954,7 +1961,7 @@ namespace GameboySharp
             return result;
         }
 
-        private byte RL(byte b)
+        internal byte RL(byte b)
         {
             byte oldCarry = FlagC ? (byte)1 : (byte)0;
             byte result = (byte)((b << 1) | oldCarry);
@@ -1965,7 +1972,7 @@ namespace GameboySharp
             return result;
         }
 
-        private byte RR(byte b)
+        internal byte RR(byte b)
         {
             byte oldCarry = FlagC ? (byte)0x80 : (byte)0;
             byte result = (byte)((b >> 1) | oldCarry);
@@ -1976,7 +1983,7 @@ namespace GameboySharp
             return result;
         }
 
-        private byte SLA(byte b)
+        internal byte SLA(byte b)
         {
             byte result = (byte)(b << 1);
             FlagZ = result == 0;
@@ -1986,7 +1993,7 @@ namespace GameboySharp
             return result;
         }
 
-        private byte SRA(byte b)
+        internal byte SRA(byte b)
         {
             byte result = (byte)((b >> 1) | (b & 0x80)); // Preserve MSB for sign extension
             FlagZ = result == 0;
@@ -1996,7 +2003,7 @@ namespace GameboySharp
             return result;
         }
 
-        private byte SWAP(byte value)
+        internal byte SWAP(byte value)
         {
             byte result = (byte)(((value & 0x0F) << 4) | ((value & 0xF0) >> 4));
             FlagZ = result == 0;
@@ -2006,7 +2013,7 @@ namespace GameboySharp
             return result;
         }
 
-        private byte SRL(byte value)
+        internal byte SRL(byte value)
         {
             FlagC = (value & 0x01) != 0;
             byte result = (byte)(value >> 1);
@@ -2016,24 +2023,24 @@ namespace GameboySharp
             return result;
         }
 
-        private void BIT(byte bit, byte value)
+        internal void BIT(byte bit, byte value)
         {
             FlagZ = (value & (1 << bit)) == 0;
             FlagN = false;
             FlagH = true;
         }
 
-        private byte RES(byte bit, byte value)
+        internal byte RES(byte bit, byte value)
         {
             return (byte)(value & ~(1 << bit));
         }
 
-        private byte SET(byte bit, byte value)
+        internal byte SET(byte bit, byte value)
         {
             return (byte)(value | (1 << bit));
         }
 
-        private void RLCA()
+        internal void RLCA()
         {
             FlagC = (A & 0x80) != 0;
             A = (byte)((A << 1) | (A >> 7));
@@ -2042,7 +2049,7 @@ namespace GameboySharp
             FlagH = false;
         }
 
-        private void RRCA()
+        internal void RRCA()
         {
             FlagC = (A & 0x01) != 0;
             A = (byte)((A >> 1) | (A << 7));
@@ -2051,7 +2058,7 @@ namespace GameboySharp
             FlagH = false;
         }
 
-        private void RLA()
+        internal void RLA()
         {
             bool oldCarry = FlagC;
             FlagC = (A & 0x80) != 0;
@@ -2061,7 +2068,7 @@ namespace GameboySharp
             FlagH = false;
         }
 
-        private void RRA()
+        internal void RRA()
         {
             bool oldCarry = FlagC;
             FlagC = (A & 0x01) != 0;
@@ -2071,7 +2078,7 @@ namespace GameboySharp
             FlagH = false;
         }
 
-        private void DAA()
+        internal void DAA()
         {
             byte correction = 0;
             bool carry = false;
@@ -2094,28 +2101,28 @@ namespace GameboySharp
             FlagC = carry;
         }
 
-        private void CPL()
+        internal void CPL()
         {
             A = (byte)~A;
             FlagN = true;
             FlagH = true;
         }
 
-        private void SCF()
+        internal void SCF()
         {
             FlagN = false;
             FlagH = false;
             FlagC = true;
         }
 
-        private void CCF()
+        internal void CCF()
         {
             FlagN = false;
             FlagH = false;
             FlagC = !FlagC;
         }
 
-        private void ADC(byte value)
+        internal void ADC(byte value)
         {
             int carry = FlagC ? 1 : 0;
             int result = A + value + carry;
@@ -2126,7 +2133,7 @@ namespace GameboySharp
             A = (byte)result;
         }
 
-        private void SBC(byte value)
+        internal void SBC(byte value)
         {
             int carry = FlagC ? 1 : 0;
             int result = A - value - carry;
@@ -2137,7 +2144,7 @@ namespace GameboySharp
             A = (byte)result;
         }
 
-        private void RST(ushort address)
+        internal void RST(ushort address)
         {
             PushWord((ushort)(PC + 1));
             PC = address;
@@ -2159,7 +2166,7 @@ namespace GameboySharp
             if_register = newFlags;
         }
 
-        private void PushWord(ushort value)
+        internal void PushWord(ushort value)
         {
             // Push high byte then low byte
             byte high = (byte)(value >> 8);
@@ -2170,7 +2177,7 @@ namespace GameboySharp
             Mmu.WriteByte(SP, low);
         }
 
-        private ushort PopWord()
+        internal ushort PopWord()
         {
             // Pop low byte then high byte
             byte low = Mmu.ReadByte(SP);

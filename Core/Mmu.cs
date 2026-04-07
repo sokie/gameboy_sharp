@@ -47,6 +47,9 @@ namespace GameboySharp
         private IMbc _mbc;
         private Apu _apu;
 
+        // JIT block cache reference for invalidation on writes to executable memory
+        internal Jit.BlockCache? JitBlockCache { get; set; }
+
 
         // Game Boy Color specific fields
         private bool _isGameBoyColor = false;
@@ -921,10 +924,17 @@ namespace GameboySharp
             if (address >= WORK_RAM_START && address <= WORK_RAM_END)
             {
                 WriteWramByte(address, value);
+                JitBlockCache?.InvalidateAddress(address);
                 return;
             }
 
             _memory[address] = value;
+
+            // Invalidate JIT cache for HRAM writes (code can execute from 0xFF80-0xFFFE)
+            if (address >= 0xFF80 && address <= 0xFFFE)
+            {
+                JitBlockCache?.InvalidateAddress(address);
+            }
         }
 
         private void WriteIORegister(ushort address, byte value)
@@ -1297,5 +1307,7 @@ namespace GameboySharp
 
             Log.Debug($"DMA transfer completed: {transferSize} bytes from {sourceAddress:X4} to OAM");
         }
+
+        internal int GetCurrentRomBank() => _mbc?.CurrentRomBank ?? 0;
     }
 }
