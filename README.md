@@ -83,28 +83,31 @@ dotnet build -c Release
 
 ## Running
 
-1. Place your ROM file in a location accessible to the emulator
-2. Update the ROM path in `Program.cs`:
-   ```csharp
-   emulator.LoadRom("path/to/your/rom.gb");
-   ```
-3. Run the emulator:
-   ```bash
-   dotnet run
-   ```
+Pass the path to your ROM as the first argument:
+
+```bash
+dotnet run -- path/to/your/rom.gb
+```
 
 Or run the compiled executable directly:
 
 ```bash
-./bin/Debug/net9.0/GameboySharp
+./bin/Debug/net9.0/GameboySharp path/to/your/rom.gb
 ```
+
+### Audio backend
+Audio plays through **SDL3** by default — it opens the device at its native sample rate (so no
+resampling is needed) and recovers cleanly from buffer underruns. If SDL is unavailable it falls
+back to OpenAL. Force a specific backend with the `GBSHARP_AUDIO` environment variable
+(`sdl` or `openal`).
 
 ### First Run
 On first run, you'll see two windows:
 1. **Game Window** (640x576) - Displays the Game Boy screen
 2. **Debug Window** - Shows CPU state, memory, VRAM, sprites, and controls
 
-The emulator starts **paused** by default. Click **Continue** in the debug window to start execution.
+The emulator starts running immediately. Use the debug window's **Pause**, **Step**, and
+**Continue** controls to inspect execution.
 
 ## Controls
 
@@ -128,6 +131,62 @@ The emulator starts **paused** by default. Click **Continue** in the debug windo
 - **VRAM Viewer** - View tiles and background data
 - **Sprite Viewer** - Inspect sprite attributes
 - **Serial Output** - View debug messages from ROM
+
+## Testing
+
+### Unit tests
+
+```bash
+dotnet test
+```
+
+Covers the APU and the audio pipeline (`IAudioSink`). The CPU vector test described below is
+skipped unless its data is present, so this stays fast and self-contained.
+
+### CPU accuracy — SM83 single-step vectors
+
+The CPU is validated against the community-standard
+[SingleStepTests/sm83](https://github.com/SingleStepTests/sm83) ("TomHarte") vectors: one JSON
+file per opcode, 1000 single-instruction cases each (**500,000** total). Each case sets an initial
+CPU + memory state, executes exactly one instruction, and checks every register, flag, and memory
+cell against the expected final state.
+
+The vectors (~160 MB) are **not** committed to this repo. Pull them first:
+
+```bash
+# Clone just the latest snapshot; the vectors are in sm83/v1
+git clone --depth 1 https://github.com/SingleStepTests/sm83.git
+```
+
+Then run them either way:
+
+**Standalone harness** (rich per-opcode report, runs ~500k tests in a few seconds):
+
+```bash
+dotnet run --project CpuTestHarness -c Release -- sm83/v1
+dotnet run --project CpuTestHarness -c Release -- sm83/v1 cb   # only CB-prefixed opcodes
+```
+
+**Or through `dotnet test`** — set `SM83_TEST_DIR` to enable the otherwise-skipped test:
+
+```bash
+SM83_TEST_DIR=sm83/v1 dotnet test
+```
+
+All 500 opcodes pass 100% of register/RAM checks. (STOP and HALT differ only in reported cycle
+count — a known modeling nuance for those two instructions that doesn't affect computed results.)
+
+### Audio validation harness
+
+`AudioHarness` exercises the SDL3 backend against a real audio device:
+
+```bash
+dotnet run --project AudioHarness -- info        # show the negotiated audio driver/rate
+dotnet run --project AudioHarness -- tone        # play an audible 440 Hz tone
+dotnet run --project AudioHarness -- resample    # offline resample correctness (PASS/FAIL)
+dotnet run --project AudioHarness -- recover     # buffer-underrun auto-recovery (PASS/FAIL)
+dotnet run --project AudioHarness -- play <rom>  # play a real game's audio, headless
+```
 
 ## Project Structure
 
@@ -243,6 +302,7 @@ The emulator includes extensive debugging capabilities:
 ## Dependencies
 
 - [Silk.NET](https://github.com/dotnet/Silk.NET) - Windowing, input, OpenGL, and OpenAL bindings
+- [SDL3-CS](https://github.com/ppy/SDL3-CS) - SDL3 bindings (default audio backend)
 - [ImGui.NET](https://github.com/mellinoe/ImGui.NET) - Debug UI
 - [Serilog](https://serilog.net/) - Logging
 

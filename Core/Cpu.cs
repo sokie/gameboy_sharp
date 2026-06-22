@@ -11,8 +11,8 @@ namespace GameboySharp
         public required string Cycles{ get; init; }
         public required int Bytes{ get; init; }
         //public string[] Parameters; //Good for docs but not much else, so unused for now
-        public required Func<Cpu, Mmu, string> GetParameterString{ get; init; }
-        public required Func<Cpu, Mmu, int> Execute{ get; init; }
+        public required Func<Cpu, IMemoryBus, string> GetParameterString{ get; init; }
+        public required Func<Cpu, IMemoryBus, int> Execute{ get; init; }
 
         public bool AutoIncrementPC { get; init; } = true;
 
@@ -26,8 +26,8 @@ namespace GameboySharp
         public ushort SP; // Stack Pointer
         public ushort PC; // Program Counter
 
-        private Mmu? _mmu;
-        private Mmu Mmu => _mmu ?? throw new InvalidOperationException("MMU not initialized");
+        private IMemoryBus? _mmu;
+        private IMemoryBus Mmu => _mmu ?? throw new InvalidOperationException("MMU not initialized");
 
         // Debugging and stepping
         public bool IsStepping { get; set; } = false;
@@ -47,6 +47,16 @@ namespace GameboySharp
         public bool FlagC { get { return (F & 0x10) != 0; } set { F = value ? (byte)(F | 0x10) : (byte)(F & ~0x10); } }
 
         private bool _interruptMasterEnable;
+
+        /// <summary>
+        /// The Interrupt Master Enable flag. Exposed so CPU test harnesses can set the initial
+        /// state and read the final state; normal code toggles it via EI/DI/RETI.
+        /// </summary>
+        internal bool InterruptMasterEnable
+        {
+            get => _interruptMasterEnable;
+            set => _interruptMasterEnable = value;
+        }
 
         private int _enableInterruptsScheduled = 0; // For EI delay; 0 = no, >0 = countdown
 
@@ -84,7 +94,7 @@ namespace GameboySharp
             InitializeExtendedOpcodeTable();
         }
 
-        public Cpu(Mmu? mmu)
+        public Cpu(IMemoryBus? mmu)
         {
             _mmu = mmu;
             // Initialize registers to boot ROM start values
@@ -131,7 +141,7 @@ namespace GameboySharp
             Log.Information("CPU initialized for DMG mode");
         }
 
-        public void SetMmu(Mmu mmu)
+        public void SetMmu(IMemoryBus mmu)
         {
             _mmu = mmu;
         }
@@ -245,7 +255,9 @@ namespace GameboySharp
                 Mnemonic = "STOP",
                 Description = "Stop CPU",
                 Cycles = "4",
-                Bytes = 2,
+                // STOP advances PC by 1 (per the SM83 hardware test vectors). The canonical
+                // encoding is "10 00", where the trailing 00 then simply runs as a NOP.
+                Bytes = 1,
                 GetParameterString = (c, m) => "STOP",
                 Execute = (cpu, mmu) =>
                 {
@@ -1465,7 +1477,7 @@ namespace GameboySharp
         private static void InitializeBITOpcodes(){
             // BIT opcodes (0x40-0x7F)
             string[] registers = { "B", "C", "D", "E", "H", "L", "(HL)", "A" };
-            Func<Cpu, Mmu, byte>[] registerGetters = {
+            Func<Cpu, IMemoryBus, byte>[] registerGetters = {
                 (c, m) => c.B,
                 (c, m) => c.C,
                 (c, m) => c.D,
@@ -1516,7 +1528,7 @@ namespace GameboySharp
             // RES opcodes (0x80-0xBF)
             string[] registers = ["B", "C", "D", "E", "H", "L", "(HL)", "A"];
             
-            Action<Cpu, Mmu, byte>[] registerSetters = {
+            Action<Cpu, IMemoryBus, byte>[] registerSetters = {
                 (c, m, val) => c.B = val,
                 (c, m, val) => c.C = val,
                 (c, m, val) => c.D = val,
@@ -1527,7 +1539,7 @@ namespace GameboySharp
                 (c, m, val) => c.A = val,
             };
 
-            Func<Cpu, Mmu, byte>[] registerGetters = {
+            Func<Cpu, IMemoryBus, byte>[] registerGetters = {
                 (c, m) => c.B,
                 (c, m) => c.C,
                 (c, m) => c.D,
@@ -1573,7 +1585,7 @@ namespace GameboySharp
             // SET opcodes (0xC0-0xFF)
             string[] registers = { "B", "C", "D", "E", "H", "L", "(HL)", "A" };
             
-            Action<Cpu, Mmu, byte>[] registerSetters = {
+            Action<Cpu, IMemoryBus, byte>[] registerSetters = {
                 (c, m, val) => c.B = val,
                 (c, m, val) => c.C = val,
                 (c, m, val) => c.D = val,
@@ -1584,7 +1596,7 @@ namespace GameboySharp
                 (c, m, val) => c.A = val,
             };
 
-            Func<Cpu, Mmu, byte>[] registerGetters = {
+            Func<Cpu, IMemoryBus, byte>[] registerGetters = {
                 (c, m) => c.B,
                 (c, m) => c.C,
                 (c, m) => c.D,

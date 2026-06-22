@@ -35,7 +35,7 @@ namespace GameboySharp
     public byte[] ToArray() => _memory;
 }
 
-    internal class Mmu
+    internal class Mmu : IMemoryBus
     {
         //internal byte[] _memory = new byte[0x10000]; // 64KB address space
 
