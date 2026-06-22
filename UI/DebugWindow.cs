@@ -44,7 +44,7 @@ namespace GameboySharp
 
             _gl = _window.CreateOpenGL();
             _imGuiController = new ImGuiController(_gl, _window, _window.CreateInput());
-            _window.FramebufferResize += s => _gl.Viewport(s);
+            _window.FramebufferResize += OnFramebufferResize;
 
             _window.Load += OnLoad;
             _window.Render += OnRender;
@@ -56,6 +56,11 @@ namespace GameboySharp
         private void OnLoad()
         {
             _window.MakeCurrent();
+        }
+
+        private void OnFramebufferResize(Vector2D<int> newSize)
+        {
+            _gl.Viewport(newSize);
         }
 
         private void OnRender(double delta)
@@ -393,10 +398,15 @@ namespace GameboySharp
             {
                 _window.Load -= OnLoad;
                 _window.Render -= OnRender;
-                _window.FramebufferResize -= s => _gl.Viewport(s);
+                _window.FramebufferResize -= OnFramebufferResize;
             }
-            //TODO: fix
-            //_gl.DeleteTextures(_tileTextureIds.Length, _tileTextureIds);
+
+            // Delete the GPU textures created for the tile/sprite viewers (this context must be
+            // current for the deletes to land on the right textures).
+            _window?.MakeCurrent();
+            _gl?.DeleteTextures((uint)_spriteTextureIds.Length, _spriteTextureIds);
+            _gl?.DeleteTextures((uint)_tileTextureIds.Length, _tileTextureIds);
+
             _imGuiController?.Dispose();
             _gl?.Dispose();
             _window?.Dispose();

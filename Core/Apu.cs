@@ -10,10 +10,17 @@ namespace GameboySharp
     internal class Apu
     {
         // --- APU Timing and Constants ---
-        private const int SampleRate = 44100;
+        // The output sample rate is chosen by the audio backend to match the playback device's
+        // native rate (so nothing has to resample). The Game Boy itself has no PCM sample rate —
+        // its output is analog — so this is purely the host rate we decimate the APU down to.
+        private readonly int _sampleRate;
 
-        // It's correct to always use base clock speed and not double speed for this.
-        private const double CyclesPerSample = GameboyConstants.CpuClockSpeed / SampleRate;
+        // How many CPU cycles pass between output samples. Always derived from the base clock
+        // speed (not double speed) — that is correct for audio.
+        private readonly double _cyclesPerSample;
+
+        /// <summary>The host output sample rate, in Hz.</summary>
+        public int SampleRate => _sampleRate;
 
         // --- Frame Sequencer ---
         // The frame sequencer generates clocks for length, envelope, and sweep units.
@@ -30,11 +37,19 @@ namespace GameboySharp
         private int _bufferIndex = 0;
         private double _apuCycleCounter = 0;
 
-        // Audio Processing State (DC blocking filter) ---
-        private float _dcBlockPrevXLeft = 0.0f;
-        private float _dcBlockPrevYLeft = 0.0f;
-        private float _dcBlockPrevXRight = 0.0f;
-        private float _dcBlockPrevYRight = 0.0f;
+        // --- DC blocking filters ---
+        // One filter per channel centers each channel at 0 before mixing. This matters because
+        // an enabled channel idles at -1.0 when its current sample is 0 (e.g. the low part of a
+        // pulse), while a *disabled* channel outputs 0.0. Without per-channel filtering, every
+        // channel enable/disable, DAC toggle, trigger, or NR51 pan change injects a step of up to
+        // 1.0 into the mix — the "pop" some games produce. Filtering each channel individually
+        // makes those transitions near-silent. The two output filters are a final safety net.
+        private DcBlocker _channel1Filter;
+        private DcBlocker _channel2Filter;
+        private DcBlocker _channel3Filter;
+        private DcBlocker _channel4Filter;
+        private DcBlocker _leftOutputFilter;
+        private DcBlocker _rightOutputFilter;
 
         // --- APU Sound Channels ---
         private PulseWithSweepChannel _channel1; // Pulse A (with sweep)
@@ -50,8 +65,15 @@ namespace GameboySharp
         private byte _nr51; // 0xFF25 - Sound output terminal selection
         private byte _nr52; // 0xFF26 - Sound on/off
 
-        public Apu()
+        /// <param name="sampleRate">
+        /// Host output rate in Hz, normally the audio device's native rate. Defaults to 44100
+        /// so existing callers (and the test suite) keep working unchanged.
+        /// </param>
+        public Apu(int sampleRate = 44100)
         {
+            _sampleRate = sampleRate;
+            _cyclesPerSample = GameboyConstants.CpuClockSpeed / sampleRate;
+
             _channel1 = new PulseWithSweepChannel();
             _channel2 = new PulseChannel();
             _channel3 = new WaveChannel();
@@ -109,9 +131,9 @@ namespace GameboySharp
 
             // --- Sound Generation and Buffering ---
             _apuCycleCounter += cpuCycles;
-            while (_apuCycleCounter >= CyclesPerSample)
+            while (_apuCycleCounter >= _cyclesPerSample)
             {
-                _apuCycleCounter -= CyclesPerSample;
+                _apuCycleCounter -= _cyclesPerSample;
 
                 // Only generate audio if APU is enabled and we have an audio callback
                 if ((_nr52 & 0x80) == 0 || AudioBufferReady == null)
@@ -129,11 +151,12 @@ namespace GameboySharp
                     return;
                 }
 
-                // 1. Get sample from each channel
-                float sample1 = _channel1.GetSample();
-                float sample2 = _channel2.GetSample();
-                float sample3 = _channel3.GetSample();
-                float sample4 = _channel4.GetSample();
+                // 1. Get sample from each channel, individually DC-blocked so a channel's
+                //    idle/disabled transition no longer pops the mix (see field comments).
+                float sample1 = _channel1Filter.Process(_channel1.GetSample());
+                float sample2 = _channel2Filter.Process(_channel2.GetSample());
+                float sample3 = _channel3Filter.Process(_channel3.GetSample());
+                float sample4 = _channel4Filter.Process(_channel4.GetSample());
 
                 // 2. Mix samples for left and right outputs based on NR51 register
                 float mixedLeft = 0.0f;
@@ -167,9 +190,9 @@ namespace GameboySharp
                 float processedLeft = avgLeft * ((leftVolume + 1) / 8.0f);
                 float processedRight = avgRight * ((rightVolume + 1) / 8.0f);
 
-                // 5. Apply DC blocking high-pass filter
-                processedLeft = DcBlock(processedLeft, ref _dcBlockPrevXLeft, ref _dcBlockPrevYLeft);
-                processedRight = DcBlock(processedRight, ref _dcBlockPrevXRight, ref _dcBlockPrevYRight);
+                // 5. Apply the output DC blocking high-pass filter (final safety net)
+                processedLeft = _leftOutputFilter.Process(processedLeft);
+                processedRight = _rightOutputFilter.Process(processedRight);
                 
                 // 6. Apply soft clipping to prevent harsh distortion
                 processedLeft = SoftClip(processedLeft);
@@ -253,6 +276,14 @@ namespace GameboySharp
                     _channel2.PowerOff();
                     _channel3.PowerOff();
                     _channel4.PowerOff();
+
+                    // Reset every DC filter so a later power-on starts from silence cleanly.
+                    _channel1Filter.Reset();
+                    _channel2Filter.Reset();
+                    _channel3Filter.Reset();
+                    _channel4Filter.Reset();
+                    _leftOutputFilter.Reset();
+                    _rightOutputFilter.Reset();
                 }
                 // When turning ON: next FS step must be 0; clear CH3 sample buffer
                 if (!wasApuEnabled && isApuNowEnabled)
@@ -315,20 +346,6 @@ namespace GameboySharp
                     _nr51 = value;
                     break;
             }
-        }
-
-        /// <summary>
-        /// A high-pass filter to remove DC offset from the signal.
-        /// Standard DC blocker: y[n] = x[n] - x[n-1] + R * y[n-1]
-        /// </summary>
-        internal static float DcBlock(float x, ref float prevX, ref float prevY)
-        {
-            // R ≈ 0.997 gives ~20 Hz cutoff at 44.1 kHz
-            const float R = 0.997f;
-            float y = x - prevX + R * prevY;
-            prevX = x;
-            prevY = y;
-            return y;
         }
 
         /// <summary>

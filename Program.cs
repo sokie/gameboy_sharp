@@ -24,14 +24,15 @@ public class Program
         Log.Information("Initializing Emulator...");
         using var emulator = new Emulator();
         
+        // The ROM path is the first command-line argument, e.g. `dotnet run -- path/to/game.gb`.
+        string romPath = args.Length > 0 ? args[0] : "YOUR_ROM_HERE";
         try
         {
-            // Load the ROM. Change this path to your ROM file.
-            emulator.LoadRom("YOUR_ROM_HERE");
+            emulator.LoadRom(romPath);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Failed to load ROM.");
+            Log.Error(ex, $"Failed to load ROM at '{romPath}'. Pass the ROM path as the first command-line argument.");
             return;
         }
 

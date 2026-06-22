@@ -49,7 +49,12 @@ namespace GameboySharp
         {
             // This is called when the window is ready
             _window.MakeCurrent();
-            _window.FramebufferResize += s => _gl.Viewport(s);
+            _window.FramebufferResize += OnFramebufferResize;
+        }
+
+        private void OnFramebufferResize(Vector2D<int> newSize)
+        {
+            _gl.Viewport(newSize);
         }
 
         private void OnUpdate(double delta)
@@ -76,7 +81,7 @@ namespace GameboySharp
                 _window.Load -= OnLoad;
                 _window.Update -= OnUpdate;
                 _window.Render -= OnRender;
-                _window.FramebufferResize -= s => _gl.Viewport(s);
+                _window.FramebufferResize -= OnFramebufferResize;
             }
             
             _renderer?.Dispose();

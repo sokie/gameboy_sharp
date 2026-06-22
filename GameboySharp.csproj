@@ -10,10 +10,20 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="GameboySharp.Tests" />
+    <InternalsVisibleTo Include="AudioHarness" />
   </ItemGroup>
 
   <ItemGroup>
     <Compile Remove="GameboySharp.Tests/**" />
+    <Compile Remove="AudioHarness/**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- GLSL shaders are loaded at runtime via File.ReadAllText("shaders/..."),
+         so they must be copied next to the executable. -->
+    <None Include="shaders/**/*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>
@@ -23,6 +33,7 @@
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageReference Include="Silk.NET.Input" Version="2.22.0" />
     <PackageReference Include="Silk.NET.OpenAL" Version="2.22.0" />
+    <PackageReference Include="ppy.SDL3-CS" Version="2026.520.0" />
     <PackageReference Include="Silk.NET.OpenGL" Version="2.22.0" />
     <PackageReference Include="Silk.NET.OpenGL.Extensions.ImGui" Version="2.22.0" />
     <PackageReference Include="Silk.NET.Windowing" Version="2.22.0" />

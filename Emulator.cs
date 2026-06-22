@@ -25,7 +25,7 @@ namespace GameboySharp
 
         public readonly Apu Apu;
 
-        internal AudioStreamerAL? AudioStreamerAL;
+        internal IAudioSink? AudioSink;
         
         private bool _disposed = false;
         private Action<char> _serialDataHandler;
@@ -35,36 +35,61 @@ namespace GameboySharp
 
         public Emulator()
         {
-            // Initialize components in the correct order
             Cpu = new Cpu(null); // MMU is set later
-            // Start paused for debugging
-            Cpu.Pause();
-            Apu = new Apu(); 
+
+            // Build the audio backend first so the APU can generate at the device's native rate
+            // and avoid any resampling. If audio fails to initialize, the emulator still runs —
+            // just silently.
+            int sampleRate = 48000;
+            try
+            {
+                AudioSink = CreateAudioSink();
+                sampleRate = AudioSink.SampleRate;
+                Log.Information($"Audio system initialized: {AudioSink.GetType().Name} @ {sampleRate} Hz");
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Failed to initialize audio system. Sound will be disabled.");
+                AudioSink = null;
+            }
+
+            Apu = new Apu(sampleRate);
+            if (AudioSink != null) Apu.AudioBufferReady += AudioSink.Submit;
+
             Joypad = new Joypad(Cpu);
             Timer = new Timer(Cpu);
             Ppu = new Ppu(null, Cpu); // MMU is set later
             Mmu = new Mmu(Joypad, Ppu, Timer, Cpu, Apu);
 
-             // Link components
+            // Link components
             Cpu.SetMmu(Mmu);
             Ppu.SetMmu(Mmu);
 
-            // Initialize audio with proper error handling
+            // Subscribe to events
+            _serialDataHandler = c => SerialLog.Append(c);
+            Mmu.OnSerialData += _serialDataHandler;
+        }
+
+        /// <summary>
+        /// Creates the audio backend: SDL3 by default, OpenAL as a fallback. Set the
+        /// GBSHARP_AUDIO environment variable to "sdl" or "openal" to force a specific backend
+        /// (handy for A/B testing the two implementations).
+        /// </summary>
+        private static IAudioSink CreateAudioSink()
+        {
+            string? preference = Environment.GetEnvironmentVariable("GBSHARP_AUDIO")?.ToLowerInvariant();
+            if (preference == "openal") return new AudioStreamerAL();
+            if (preference == "sdl") return new SdlAudioSink();
+
             try
             {
-                AudioStreamerAL = new AudioStreamerAL();
-                Apu.AudioBufferReady += AudioStreamerAL.ReceiveSamplesFromApu;
-                Log.Information("Audio system initialized successfully");
+                return new SdlAudioSink();
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Failed to initialize audio system. Sound will be disabled.");
-                AudioStreamerAL = null;
+                Log.Warning(ex, "SDL audio backend unavailable; falling back to OpenAL.");
+                return new AudioStreamerAL();
             }
-
-            // Subscribe to events
-            _serialDataHandler = c => SerialLog.Append(c);
-            Mmu.OnSerialData += _serialDataHandler;            
         }
 
         public void LoadRom(string path)
@@ -100,34 +125,34 @@ namespace GameboySharp
         public string GetAudioStatus()
         {
             var apuStatus = Apu.GetStatus();
-            var audioStatus = AudioStreamerAL?.GetStatus() ?? "Audio system not available";
+            var audioStatus = AudioSink?.GetStatus() ?? "Audio system not available";
             return $"APU: {apuStatus} | Audio: {audioStatus}";
         }
 
         public void RunFrame()
         {
-            int cyclesThisFrame = 0;
-            while (cyclesThisFrame < GameboyConstants.CyclesPerFrame)
+            if (!Cpu.IsPaused)
             {
-                if (Cpu.IsPaused)
+                int cyclesThisFrame = 0;
+                while (cyclesThisFrame < GameboyConstants.CyclesPerFrame)
                 {
-                    // Don't burn CPU cycles if the emulator is paused
-                    Thread.Sleep(16);
-                    return;
+                    int cycles = Cpu.Step();
+
+                    // PPU and Timer run in machine cycles, which are half the CPU cycles when
+                    // the Game Boy Color is in double-speed mode.
+                    int machineCycles = Mmu.IsDoubleSpeedMode ? cycles / 2 : cycles;
+
+                    Ppu.Step(machineCycles);
+                    Timer.Tick(machineCycles);
+                    Apu.Step(machineCycles);
+
+                    cyclesThisFrame += machineCycles;
                 }
-
-                int cycles = Cpu.Step();
-
-                // PPU and Timer cycles are based on CPU speed mode
-                int machineCycles = Mmu.IsDoubleSpeedMode ? cycles / 2 : cycles;
-
-                Ppu.Step(machineCycles);
-                Timer.Tick(machineCycles);
-                Apu.Step(machineCycles);
-                
-                cyclesThisFrame += machineCycles;
             }
-            AudioStreamerAL?.UpdateStream();
+
+            // Always service the audio backend, even while paused, so the device stays fed and
+            // alive. The main loop handles frame pacing, so there is no busy-wait here.
+            AudioSink?.Update();
         }
 
         private void InitializeHardwareForGbc()
@@ -174,13 +199,13 @@ namespace GameboySharp
                         Mmu.OnSerialData -= _serialDataHandler;
                     }
                     
-                    if (Apu != null && AudioStreamerAL != null)
+                    if (Apu != null && AudioSink != null)
                     {
-                        Apu.AudioBufferReady -= AudioStreamerAL.ReceiveSamplesFromApu;
+                        Apu.AudioBufferReady -= AudioSink.Submit;
                     }
-                    
+
                     // Dispose managed resources
-                    AudioStreamerAL?.Dispose();
+                    AudioSink?.Dispose();
                     SerialLog?.Clear();
                 }
                 _disposed = true;

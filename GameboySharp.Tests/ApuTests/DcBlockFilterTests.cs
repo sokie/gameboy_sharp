@@ -7,14 +7,14 @@ public class DcBlockFilterTests
     [Fact]
     public void DcBlock_PassesAcSignal()
     {
-        float prevX = 0, prevY = 0;
+        var filter = new DcBlocker();
 
         // Feed a square wave (AC signal) through the filter
         float maxOutput = 0;
         for (int i = 0; i < 1000; i++)
         {
             float input = (i % 2 == 0) ? 1.0f : -1.0f;
-            float output = Apu.DcBlock(input, ref prevX, ref prevY);
+            float output = filter.Process(input);
             if (i > 100) // Let filter settle
             {
                 maxOutput = Math.Max(maxOutput, Math.Abs(output));
@@ -29,13 +29,13 @@ public class DcBlockFilterTests
     [Fact]
     public void DcBlock_RemovesDcOffset()
     {
-        float prevX = 0, prevY = 0;
+        var filter = new DcBlocker();
 
         // Feed a constant DC signal
         float lastOutput = 0;
         for (int i = 0; i < 10000; i++)
         {
-            lastOutput = Apu.DcBlock(0.5f, ref prevX, ref prevY);
+            lastOutput = filter.Process(0.5f);
         }
 
         // DC should be removed (output near 0)
@@ -46,7 +46,7 @@ public class DcBlockFilterTests
     [Fact]
     public void DcBlock_PreservesAmplitudeOfAcOnDc()
     {
-        float prevX = 0, prevY = 0;
+        var filter = new DcBlocker();
 
         // Feed AC signal with DC offset
         float minOutput = float.MaxValue;
@@ -56,7 +56,7 @@ public class DcBlockFilterTests
         {
             // 0.5 DC offset + 0.3 amplitude square wave
             float input = 0.5f + (i % 2 == 0 ? 0.3f : -0.3f);
-            float output = Apu.DcBlock(input, ref prevX, ref prevY);
+            float output = filter.Process(input);
 
             if (i > 2000) // Let filter settle
             {
@@ -78,11 +78,11 @@ public class DcBlockFilterTests
     [Fact]
     public void DcBlock_ZeroInputProducesZeroOutput()
     {
-        float prevX = 0, prevY = 0;
+        var filter = new DcBlocker();
 
         for (int i = 0; i < 100; i++)
         {
-            float output = Apu.DcBlock(0.0f, ref prevX, ref prevY);
+            float output = filter.Process(0.0f);
             Assert.Equal(0.0f, output);
         }
     }

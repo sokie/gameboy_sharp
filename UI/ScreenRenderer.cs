@@ -76,21 +76,14 @@ namespace GameboySharp
 
         public unsafe void Render(uint[] frameBuffer)
         {
-            // Convert uint[] (AABBGGRR) to byte[] (RGBA) for OpenGL
-            var byteBuffer = new byte[frameBuffer.Length * 4];
-            for (int i = 0; i < frameBuffer.Length; i++)
-            {
-                uint color = frameBuffer[i];
-                int byteIndex = i * 4;
-                byteBuffer[byteIndex]     = (byte)(color & 0xFF);         // R
-                byteBuffer[byteIndex + 1] = (byte)((color >> 8) & 0xFF);  // G
-                byteBuffer[byteIndex + 2] = (byte)((color >> 16) & 0xFF); // B
-                byteBuffer[byteIndex + 3] = (byte)((color >> 24) & 0xFF); // A
-            }
-
-            // Update texture on the GPU
+            // The PPU stores each pixel as a uint in AABBGGRR order. On a little-endian
+            // target (all our platforms: x64/arm64) that uint is laid out in memory as the
+            // bytes [R, G, B, A], which is exactly what GL_RGBA + GL_UNSIGNED_BYTE expects.
+            // So we can upload the framebuffer straight from its pinned pointer — no per-frame
+            // byte[] allocation and no per-pixel conversion loop (those were ~92 KB of Gen0
+            // garbage every frame on the same thread that services audio).
             _gl.BindTexture(TextureTarget.Texture2D, _texture);
-            fixed (byte* ptr = byteBuffer)
+            fixed (uint* ptr = frameBuffer)
             {
                 _gl.TexSubImage2D(TextureTarget.Texture2D, 0, 0, 0,
                     (uint)GameboyConstants.ScreenWidth, (uint)GameboyConstants.ScreenHeight,
