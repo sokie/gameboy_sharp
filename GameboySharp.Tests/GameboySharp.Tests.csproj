@@ -16,7 +16,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\GameboySharp.csproj" />
-    <ProjectReference Include="..\CpuTestHarness\CpuTestHarness.csproj" />
   </ItemGroup>
 
 </Project>

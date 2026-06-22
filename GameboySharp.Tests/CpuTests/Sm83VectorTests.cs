@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Linq;
-using CpuTestHarness;
 using Xunit;
 
 namespace GameboySharp.Tests.CpuTests;

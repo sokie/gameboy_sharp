@@ -11,13 +11,11 @@
   <ItemGroup>
     <InternalsVisibleTo Include="GameboySharp.Tests" />
     <InternalsVisibleTo Include="AudioHarness" />
-    <InternalsVisibleTo Include="CpuTestHarness" />
   </ItemGroup>
 
   <ItemGroup>
     <Compile Remove="GameboySharp.Tests/**" />
     <Compile Remove="AudioHarness/**" />
-    <Compile Remove="CpuTestHarness/**" />
   </ItemGroup>
 
   <ItemGroup>

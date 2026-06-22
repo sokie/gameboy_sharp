@@ -158,23 +158,15 @@ The vectors (~160 MB) are **not** committed to this repo. Pull them first:
 git clone --depth 1 https://github.com/SingleStepTests/sm83.git
 ```
 
-Then run them either way:
-
-**Standalone harness** (rich per-opcode report, runs ~500k tests in a few seconds):
-
-```bash
-dotnet run --project CpuTestHarness -c Release -- sm83/v1
-dotnet run --project CpuTestHarness -c Release -- sm83/v1 cb   # only CB-prefixed opcodes
-```
-
-**Or through `dotnet test`** — set `SM83_TEST_DIR` to enable the otherwise-skipped test:
+Then point `SM83_TEST_DIR` at the vector folder, which enables the otherwise-skipped CPU test:
 
 ```bash
 SM83_TEST_DIR=sm83/v1 dotnet test
 ```
 
-All 500 opcodes pass 100% of register/RAM checks. (STOP and HALT differ only in reported cycle
-count — a known modeling nuance for those two instructions that doesn't affect computed results.)
+All 500 opcodes pass 100% of register/RAM checks (~500,000 cases in a couple of seconds). STOP and
+HALT differ only in reported cycle count — a known modeling nuance for those two instructions that
+doesn't affect computed results.
 
 ### Audio validation harness
 
