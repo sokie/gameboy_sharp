@@ -1,3 +1,4 @@
+using System.IO;
 using Serilog;
 
 namespace GameboySharp
@@ -12,6 +13,7 @@ namespace GameboySharp
         private readonly byte[] _ramData;
         private readonly int _romSize;
         private readonly int _romBankCount;
+        private readonly bool _hasBattery;
 
         // MBC2 registers
         private bool _ramEnabled = false;
@@ -20,11 +22,13 @@ namespace GameboySharp
         public bool IsRamEnabled => _ramEnabled;
         public int CurrentRomBank => _romBankNumber;
         public int CurrentRamBank => 0; // MBC2 only has one RAM bank
+        public bool HasBattery => _hasBattery;
 
-        public Mbc2(byte[] romData)
+        public Mbc2(byte[] romData, bool hasBattery = false)
         {
             _romData = romData ?? throw new ArgumentNullException(nameof(romData));
             _romSize = romData.Length;
+            _hasBattery = hasBattery;
 
             // Calculate bank count (16KB per bank)
             _romBankCount = _romSize / 0x4000;
@@ -166,6 +170,33 @@ namespace GameboySharp
             {
                 Log.Warning($"MBC2: RAM write out of bounds at address 0x{address:X4}");
             }
+        }
+
+        public byte[] GetRam() => _ramData;
+
+        public void SetRam(byte[] data)
+        {
+            if (data == null) return;
+            Array.Copy(data, _ramData, Math.Min(data.Length, _ramData.Length));
+        }
+
+        public void SaveState(BinaryWriter writer)
+        {
+            writer.Write(_ramEnabled);
+            writer.Write(_romBankNumber);
+
+            writer.Write(_ramData.Length);
+            writer.Write(_ramData);
+        }
+
+        public void LoadState(BinaryReader reader)
+        {
+            _ramEnabled = reader.ReadBoolean();
+            _romBankNumber = reader.ReadInt32();
+
+            int ramLength = reader.ReadInt32();
+            byte[] ram = reader.ReadBytes(ramLength);
+            SetRam(ram);
         }
     }
 }

@@ -41,6 +41,13 @@ ScaffoldingReadMe.txt
 *~
 CodeCoverage/
 
+# Dear ImGui writes its window layout here at runtime
+imgui.ini
+
+# Emulator runtime artifacts (battery saves and save states live next to ROMs)
+*.sav
+*.state*
+
 # MSBuild Binary and Structured Log
 *.binlog
 

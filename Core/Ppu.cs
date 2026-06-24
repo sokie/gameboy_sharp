@@ -95,7 +95,10 @@ namespace GameboySharp
         private bool _isGbcMode = false; // Set this to true for GBC games
 
         // --- DMG monochrome colors (FIX: Format is now AABBGGRR for consistency) ---
+        // The static array is the original pea-green default; the instance array is what rendering
+        // actually uses, so the user can swap palette presets at runtime (see SetDmgPalette).
         internal static readonly uint[] _dmgColors = { 0xFF0FBC9B, 0xFF0FAC8B, 0xFF306230, 0xFF0F380F };
+        private uint[] _dmgPalette = (uint[])_dmgColors.Clone();
 
         // --- PPU Registers (DMG) ---
         private byte _lcdc = 0x91;
@@ -140,6 +143,88 @@ namespace GameboySharp
         public void SetGbcMode(bool isGbc)
         {
             _isGbcMode = isGbc;
+        }
+
+        /// <summary>
+        /// Restores the PPU to its post-boot-ROM state for a machine reset: power-on register values,
+        /// a cleared scanline/mode timer, and default colour palettes. <see cref="_isGbcMode"/> is left
+        /// alone because it is decided by the inserted cartridge, not by the power switch.
+        /// </summary>
+        public void Reset()
+        {
+            _lcdc = 0x91;
+            _stat = 0x85;
+            _scy = 0x00;
+            _scx = 0x00;
+            _ly = 0x00;
+            _lyc = 0x00;
+            _bgp = 0xFC;
+            _obp0 = 0xFF;
+            _obp1 = 0xFF;
+            _wy = 0x00;
+            _wx = 0x00;
+
+            _cyclesCounter = 0;
+            _currentMode = PpuMode.OamScan;
+            _windowLineCounter = 0;
+
+            _bcps = 0x00;
+            _ocps = 0x00;
+            InitializeGbcPalettes();
+
+            Array.Clear(_frameBuffer, 0, _frameBuffer.Length);
+        }
+
+        /// <summary>
+        /// Writes the PPU's full state to a save state. Besides the visible registers this includes the
+        /// rendering position — the scanline cycle counter, the current mode, and the window line
+        /// counter — plus the GBC colour palette RAM. Those are the easy-to-miss pieces: drop the dot
+        /// counter or window line counter and the picture tears for a frame or two after a reload.
+        /// </summary>
+        public void SaveState(System.IO.BinaryWriter writer)
+        {
+            writer.Write(_lcdc); writer.Write(_stat);
+            writer.Write(_scy); writer.Write(_scx);
+            writer.Write(_ly); writer.Write(_lyc);
+            writer.Write(_bgp); writer.Write(_obp0); writer.Write(_obp1);
+            writer.Write(_wy); writer.Write(_wx);
+
+            writer.Write(_cyclesCounter);
+            writer.Write((int)_currentMode);
+            writer.Write(_windowLineCounter);
+
+            writer.Write(_bcps); writer.Write(_ocps);
+            writer.Write(_bgPaletteRam);
+            writer.Write(_spritePaletteRam);
+        }
+
+        public void LoadState(System.IO.BinaryReader reader)
+        {
+            _lcdc = reader.ReadByte(); _stat = reader.ReadByte();
+            _scy = reader.ReadByte(); _scx = reader.ReadByte();
+            _ly = reader.ReadByte(); _lyc = reader.ReadByte();
+            _bgp = reader.ReadByte(); _obp0 = reader.ReadByte(); _obp1 = reader.ReadByte();
+            _wy = reader.ReadByte(); _wx = reader.ReadByte();
+
+            _cyclesCounter = reader.ReadInt32();
+            _currentMode = (PpuMode)reader.ReadInt32();
+            _windowLineCounter = reader.ReadInt32();
+
+            _bcps = reader.ReadByte(); _ocps = reader.ReadByte();
+            ReadExactly(reader, _bgPaletteRam);
+            ReadExactly(reader, _spritePaletteRam);
+        }
+
+        /// <summary>Reads exactly <c>buffer.Length</c> bytes into <paramref name="buffer"/>.</summary>
+        private static void ReadExactly(System.IO.BinaryReader reader, byte[] buffer)
+        {
+            int read = 0;
+            while (read < buffer.Length)
+            {
+                int n = reader.Read(buffer, read, buffer.Length - read);
+                if (n == 0) throw new System.IO.EndOfStreamException("Unexpected end of save state.");
+                read += n;
+            }
         }
 
         // --- GBC ENHANCEMENT: Initialize GBC palettes with default values ---
@@ -673,7 +758,20 @@ namespace GameboySharp
         private uint GetDmgColor(int colorId, byte palette)
         {
             int shadeBits = (palette >> (colorId * 2)) & 0b11;
-            return _dmgColors[shadeBits];
+            return _dmgPalette[shadeBits];
+        }
+
+        /// <summary>
+        /// Replaces the four DMG shade colours (index 0 = lightest … 3 = darkest), letting the user
+        /// pick a palette preset. Colours are in the PPU's AABBGGRR layout. A null or wrong-sized array
+        /// is ignored so a bad value can never corrupt rendering.
+        /// </summary>
+        public void SetDmgPalette(uint[] colors)
+        {
+            if (colors is { Length: 4 })
+            {
+                _dmgPalette = (uint[])colors.Clone();
+            }
         }
 
         private uint GetGbcColor(int colorId, int paletteIndex, bool isSprite)

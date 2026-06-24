@@ -165,5 +165,39 @@ namespace GameboySharp
             _envelopeVolume = 0;
             _envelopeCounter = 0;
         }
+
+        /// <summary>
+        /// Writes the length-counter, envelope, and enable state shared by every channel. Derived
+        /// channels override this to chain their own state on after calling the base.
+        /// </summary>
+        public virtual void SaveState(System.IO.BinaryWriter writer)
+        {
+            writer.Write(_lengthEnabled);
+            writer.Write(_lengthCounter);
+            writer.Write(_lengthMax);
+            writer.Write(_envelopeEnabled);
+            writer.Write(_envelopePeriod);
+            writer.Write(_envelopeCounter);
+            writer.Write(_envelopeVolume);
+            writer.Write(_envelopeDirection);
+            writer.Write(_envelopeInitialVolume);
+            writer.Write(_enabled);
+            writer.Write(_dacEnabled);
+        }
+
+        public virtual void LoadState(System.IO.BinaryReader reader)
+        {
+            _lengthEnabled = reader.ReadBoolean();
+            _lengthCounter = reader.ReadInt32();
+            _lengthMax = reader.ReadInt32();
+            _envelopeEnabled = reader.ReadBoolean();
+            _envelopePeriod = reader.ReadInt32();
+            _envelopeCounter = reader.ReadInt32();
+            _envelopeVolume = reader.ReadInt32();
+            _envelopeDirection = reader.ReadInt32();
+            _envelopeInitialVolume = reader.ReadInt32();
+            _enabled = reader.ReadBoolean();
+            _dacEnabled = reader.ReadBoolean();
+        }
     }
 }

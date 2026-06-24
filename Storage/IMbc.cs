@@ -1,3 +1,5 @@
+using System.IO;
+
 namespace GameboySharp
 {
     /// <summary>
@@ -47,5 +49,34 @@ namespace GameboySharp
         /// Gets the current RAM bank number
         /// </summary>
         int CurrentRamBank { get; }
-    }    
+
+        /// <summary>
+        /// Gets whether this cartridge has battery-backed RAM. When true, the cartridge's RAM is
+        /// meant to survive a power-off, so the emulator persists it to a <c>.sav</c> file.
+        /// </summary>
+        bool HasBattery { get; }
+
+        /// <summary>
+        /// Returns the cartridge's external RAM (the bytes a real battery would retain), or an empty
+        /// array if the cartridge has none. This is the live backing buffer: treat it as read-only.
+        /// </summary>
+        byte[] GetRam();
+
+        /// <summary>
+        /// Replaces the cartridge's external RAM, e.g. when restoring a <c>.sav</c> file. Only as many
+        /// bytes as the cartridge actually has are copied; extra bytes are ignored.
+        /// </summary>
+        void SetRam(byte[] data);
+
+        /// <summary>
+        /// Writes the controller's mutable state (banking registers, RAM, and any clock) to a save
+        /// state. The reader side is <see cref="LoadState"/>; the two must stay in lockstep.
+        /// </summary>
+        void SaveState(BinaryWriter writer);
+
+        /// <summary>
+        /// Restores the controller's mutable state previously written by <see cref="SaveState"/>.
+        /// </summary>
+        void LoadState(BinaryReader reader);
+    }
 }

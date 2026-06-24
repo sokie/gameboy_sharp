@@ -146,6 +146,57 @@ namespace GameboySharp
             _mmu = mmu;
         }
 
+        /// <summary>
+        /// Clears the CPU's internal interrupt and halt latches for a machine reset. The visible
+        /// registers (A/F/BC/DE/HL/SP/PC) are restored separately by <see cref="InitializeForDmg"/> or
+        /// <see cref="InitializeForGbc"/>, which are the single source of truth for power-on register
+        /// values; this method only resets the bits those two methods don't touch.
+        /// </summary>
+        public void Reset()
+        {
+            _interruptMasterEnable = false;
+            _enableInterruptsScheduled = 0;
+            is_halted = false;
+            halt_bug_active = false;
+            _interruptFlagRegister = 0;
+            ie_register = 0;
+        }
+
+        /// <summary>
+        /// Writes the complete CPU state to a save state: the register file plus the interrupt and
+        /// halt latches that are easy to forget — the EI-delay countdown, the HALT state, and the HALT
+        /// bug flag. Missing any of these would make execution diverge after a reload.
+        /// </summary>
+        public void SaveState(System.IO.BinaryWriter writer)
+        {
+            writer.Write(A); writer.Write(F); writer.Write(B); writer.Write(C);
+            writer.Write(D); writer.Write(E); writer.Write(H); writer.Write(L);
+            writer.Write(SP);
+            writer.Write(PC);
+
+            writer.Write(_interruptMasterEnable);
+            writer.Write(_enableInterruptsScheduled);
+            writer.Write(is_halted);
+            writer.Write(halt_bug_active);
+            writer.Write(_interruptFlagRegister);
+            writer.Write(ie_register);
+        }
+
+        public void LoadState(System.IO.BinaryReader reader)
+        {
+            A = reader.ReadByte(); F = reader.ReadByte(); B = reader.ReadByte(); C = reader.ReadByte();
+            D = reader.ReadByte(); E = reader.ReadByte(); H = reader.ReadByte(); L = reader.ReadByte();
+            SP = reader.ReadUInt16();
+            PC = reader.ReadUInt16();
+
+            _interruptMasterEnable = reader.ReadBoolean();
+            _enableInterruptsScheduled = reader.ReadInt32();
+            is_halted = reader.ReadBoolean();
+            halt_bug_active = reader.ReadBoolean();
+            _interruptFlagRegister = reader.ReadByte();
+            ie_register = reader.ReadByte();
+        }
+
         // Initialize the opcode table with all GameBoy opcodes
         private static void InitializeOpcodeTable()
         {

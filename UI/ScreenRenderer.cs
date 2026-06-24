@@ -11,6 +11,13 @@ namespace GameboySharp
         private uint _ebo;
         private uint _shaderProgram;
         private uint _texture;
+        private int _scanlineUniformLocation = -1;
+
+        /// <summary>When true, the fragment shader applies the LCD scanline darkening effect.</summary>
+        public bool Scanlines { get; set; } = false;
+
+        // How strongly the scanline effect darkens alternate rows when enabled.
+        private const float ScanlineStrength = 0.35f;
 
         private static readonly float[] _vertices =
         {
@@ -52,6 +59,9 @@ namespace GameboySharp
             var fragmentSource = File.ReadAllText("shaders/screen.frag");
             _shaderProgram = CreateShaderProgram(vertexSource, fragmentSource);
 
+            // Cache the scanline uniform location so Render can toggle the effect cheaply.
+            _scanlineUniformLocation = _gl.GetUniformLocation(_shaderProgram, "uScanlineStrength");
+
             // --- Vertex Attribute Pointers ---
             // Position attribute
             _gl.VertexAttribPointer(0, 2, VertexAttribPointerType.Float, false, 4 * sizeof(float), null);
@@ -92,6 +102,10 @@ namespace GameboySharp
 
             // Draw the textured quad
             _gl.UseProgram(_shaderProgram);
+            if (_scanlineUniformLocation >= 0)
+            {
+                _gl.Uniform1(_scanlineUniformLocation, Scanlines ? ScanlineStrength : 0.0f);
+            }
             _gl.BindVertexArray(_vao);
             _gl.DrawElements(PrimitiveType.Triangles, (uint)_indices.Length, DrawElementsType.UnsignedInt, null);
         }

@@ -192,5 +192,36 @@ namespace GameboySharp
             _volumeShift = 0;
             _dacEnabled = false;
         }
+
+        public override void SaveState(System.IO.BinaryWriter writer)
+        {
+            base.SaveState(writer);
+            writer.Write(_frequency);
+            writer.Write(_frequencyTimer);
+            writer.Write(_frequencyTimerPeriod);
+            writer.Write(_wavePosition);
+            writer.Write(_volumeShift);
+            writer.Write(_lengthValue);
+            writer.Write(_waveTable); // 32 bytes of wave RAM
+        }
+
+        public override void LoadState(System.IO.BinaryReader reader)
+        {
+            base.LoadState(reader);
+            _frequency = reader.ReadInt32();
+            _frequencyTimer = reader.ReadInt32();
+            _frequencyTimerPeriod = reader.ReadInt32();
+            _wavePosition = reader.ReadInt32();
+            _volumeShift = reader.ReadInt32();
+            _lengthValue = reader.ReadInt32();
+
+            int read = 0;
+            while (read < _waveTable.Length)
+            {
+                int n = reader.Read(_waveTable, read, _waveTable.Length - read);
+                if (n == 0) throw new System.IO.EndOfStreamException("Unexpected end of save state.");
+                read += n;
+            }
+        }
     }
 }

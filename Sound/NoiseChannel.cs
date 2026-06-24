@@ -163,5 +163,29 @@ namespace GameboySharp
             _widthMode = 0;
             _divisor = 0;
         }
+
+        public override void SaveState(System.IO.BinaryWriter writer)
+        {
+            base.SaveState(writer);
+            writer.Write(_lfsr);
+            writer.Write(_frequencyTimer);
+            writer.Write(_frequencyTimerPeriod);
+            writer.Write(_clockShift);
+            writer.Write(_widthMode);
+            writer.Write(_divisor);
+            writer.Write(_lengthValue);
+        }
+
+        public override void LoadState(System.IO.BinaryReader reader)
+        {
+            base.LoadState(reader);
+            _lfsr = reader.ReadUInt16();
+            _frequencyTimer = reader.ReadInt32();
+            _frequencyTimerPeriod = reader.ReadInt32();
+            _clockShift = reader.ReadInt32();
+            _widthMode = reader.ReadInt32();
+            _divisor = reader.ReadInt32();
+            _lengthValue = reader.ReadInt32();
+        }
     }
 }

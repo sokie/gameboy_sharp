@@ -158,6 +158,15 @@ namespace GameboySharp
         /// </summary>
         public bool IsGameBoyColor => _isGameBoyColor;
 
+        /// <summary>Whether the inserted cartridge has battery-backed RAM that should persist to a .sav.</summary>
+        public bool CartridgeHasBattery => _mbc?.HasBattery ?? false;
+
+        /// <summary>The inserted cartridge controller, or null if none is loaded (used by the battery-save layer).</summary>
+        public IMbc? Cartridge => _mbc;
+
+        /// <summary>A snapshot reference to the cartridge's external RAM (empty if it has none).</summary>
+        public byte[] GetCartridgeRam() => _mbc?.GetRam() ?? System.Array.Empty<byte>();
+
         public void ForceGBC()
         {
             _isGameBoyColor = true;
@@ -376,6 +385,110 @@ namespace GameboySharp
             }
         }
 
+        /// <summary>
+        /// Power-cycles the machine's RAM and GBC banking state for a reset. The inserted cartridge
+        /// (<see cref="_mbc"/>) and whether this is a GBC game (<see cref="_isGameBoyColor"/>) follow
+        /// the cartridge, not the power switch, so they are deliberately preserved — a reset re-runs
+        /// the same game, and a real cartridge's battery RAM (held inside the MBC) survives too.
+        /// </summary>
+        public void Reset()
+        {
+            InitializeMemory();
+            InitializeGbcMemory();
+
+            _wramBank = 1;
+            _vramBank = 0;
+            _doubleSpeedMode = false;
+            _speedSwitchRequested = false;
+
+            _hdmaSourceHigh = 0;
+            _hdmaSourceLow = 0;
+            _hdmaDestHigh = 0;
+            _hdmaDestLow = 0;
+            _hdmaLengthMode = 0;
+            _hdmaActive = false;
+            _hdmaSource = 0;
+            _hdmaDestination = 0;
+            _hdmaRemainingBytes = 0;
+
+            _infraredPort = 0;
+            bootRomEnabled = false;
+        }
+
+        /// <summary>
+        /// Writes the MMU's full state to a save state: the 64 KB main address space, the GBC WRAM and
+        /// VRAM banks, the current bank selects, double-speed flag, the in-flight HDMA transfer, and the
+        /// cartridge controller's own state. The HDMA progress and bank selects are the easy-to-miss
+        /// parts — without them a transfer mid-flight or a banked game would corrupt on reload.
+        /// </summary>
+        public void SaveState(System.IO.BinaryWriter writer)
+        {
+            // Main 64 KB address space (DMG VRAM/WRAM/OAM/HRAM/IO live here).
+            writer.Write(_memory.ToArray(), 0, 0x10000);
+
+            // GBC banked memory.
+            for (int bank = 0; bank < _wramBanks.Length; bank++) writer.Write(_wramBanks[bank]);
+            for (int bank = 0; bank < _vramBanks.Length; bank++) writer.Write(_vramBanks[bank]);
+
+            writer.Write(_wramBank);
+            writer.Write(_vramBank);
+            writer.Write(_doubleSpeedMode);
+            writer.Write(_speedSwitchRequested);
+
+            writer.Write(_hdmaSourceHigh);
+            writer.Write(_hdmaSourceLow);
+            writer.Write(_hdmaDestHigh);
+            writer.Write(_hdmaDestLow);
+            writer.Write(_hdmaLengthMode);
+            writer.Write(_hdmaActive);
+            writer.Write(_hdmaSource);
+            writer.Write(_hdmaDestination);
+            writer.Write(_hdmaRemainingBytes);
+
+            writer.Write(_infraredPort);
+
+            if (_mbc != null) _mbc.SaveState(writer);
+        }
+
+        public void LoadState(System.IO.BinaryReader reader)
+        {
+            ReadExactly(reader, _memory.ToArray(), 0, 0x10000);
+
+            for (int bank = 0; bank < _wramBanks.Length; bank++) ReadExactly(reader, _wramBanks[bank], 0, _wramBanks[bank].Length);
+            for (int bank = 0; bank < _vramBanks.Length; bank++) ReadExactly(reader, _vramBanks[bank], 0, _vramBanks[bank].Length);
+
+            _wramBank = reader.ReadByte();
+            _vramBank = reader.ReadByte();
+            _doubleSpeedMode = reader.ReadBoolean();
+            _speedSwitchRequested = reader.ReadBoolean();
+
+            _hdmaSourceHigh = reader.ReadByte();
+            _hdmaSourceLow = reader.ReadByte();
+            _hdmaDestHigh = reader.ReadByte();
+            _hdmaDestLow = reader.ReadByte();
+            _hdmaLengthMode = reader.ReadByte();
+            _hdmaActive = reader.ReadBoolean();
+            _hdmaSource = reader.ReadUInt16();
+            _hdmaDestination = reader.ReadUInt16();
+            _hdmaRemainingBytes = reader.ReadInt32();
+
+            _infraredPort = reader.ReadByte();
+
+            if (_mbc != null) _mbc.LoadState(reader);
+        }
+
+        /// <summary>Reads exactly <paramref name="count"/> bytes into <paramref name="buffer"/> at the given offset.</summary>
+        private static void ReadExactly(System.IO.BinaryReader reader, byte[] buffer, int offset, int count)
+        {
+            int read = 0;
+            while (read < count)
+            {
+                int n = reader.Read(buffer, offset + read, count - read);
+                if (n == 0) throw new System.IO.EndOfStreamException("Unexpected end of save state.");
+                read += n;
+            }
+        }
+
         public void LoadCartridge(byte[] romData)
         {
             if (romData == null || romData.Length == 0)
@@ -391,12 +504,11 @@ namespace GameboySharp
             // Detect Game Boy Color mode
             _isGameBoyColor = header.CgbFlag == "CGB Compatible" || header.CgbFlag == "CGB Only";
             Log.Information($"Game Boy Color mode: {(_isGameBoyColor ? "Enabled" : "Disabled")}");
-            
-            // Set PPU to GBC mode if this is a GBC game
-            if (_isGameBoyColor)
-            {
-                _ppu.SetGbcMode(true);
-            }
+
+            // Keep the PPU's mode in sync with the cartridge. We always set it explicitly (not just for
+            // GBC games) so that loading a DMG ROM after a GBC ROM at runtime correctly drops back to
+            // monochrome mode rather than leaving the PPU in a stale GBC state.
+            _ppu.SetGbcMode(_isGameBoyColor);
 
             // Create appropriate MBC based on cartridge type
             _mbc = CreateMbc(header.CartridgeType, romData, header.RamSize);
@@ -407,59 +519,52 @@ namespace GameboySharp
 
         private IMbc CreateMbc(byte cartridgeType, byte[] romData, int ramSize)
         {
+            // The cartridge type byte also tells us whether the cart has a battery (its RAM should
+            // persist to a .sav) and, for MBC5, whether it has a rumble motor. We derive both here so
+            // each MBC can advertise HasBattery to the save layer.
             switch (cartridgeType)
             {
                 case 0x00: // ROM ONLY
                     return new RomOnly(romData);
-                
+
                 case 0x01: // MBC1
-                    return new Mbc1(romData, ramSize);
-                
                 case 0x02: // MBC1 + RAM
-                    return new Mbc1(romData, ramSize);
-                
+                    return new Mbc1(romData, ramSize, hasBattery: false);
+
                 case 0x03: // MBC1 + RAM + Battery
-                    return new Mbc1(romData, ramSize);
-                
+                    return new Mbc1(romData, ramSize, hasBattery: true);
+
                 case 0x05: // MBC2
-                    return new Mbc2(romData);
-                
+                    return new Mbc2(romData, hasBattery: false);
+
                 case 0x06: // MBC2 + Battery
-                    return new Mbc2(romData);
-                
-                case 0x0F: // MBC3 + Timer + Battery
-                    return new Mbc3(romData, ramSize);
-                
-                case 0x10: // MBC3 + Timer + RAM + Battery
-                    return new Mbc3(romData, ramSize);
-                
+                    return new Mbc2(romData, hasBattery: true);
+
                 case 0x11: // MBC3
-                    return new Mbc3(romData, ramSize);
-                
                 case 0x12: // MBC3 + RAM
-                    return new Mbc3(romData, ramSize);
-                
+                    return new Mbc3(romData, ramSize, hasBattery: false, hasRtc: false);
+
                 case 0x13: // MBC3 + RAM + Battery
-                    return new Mbc3(romData, ramSize);
-                
+                    return new Mbc3(romData, ramSize, hasBattery: true, hasRtc: false);
+
+                case 0x0F: // MBC3 + Timer + Battery
+                case 0x10: // MBC3 + Timer + RAM + Battery
+                    return new Mbc3(romData, ramSize, hasBattery: true, hasRtc: true);
+
                 case 0x19: // MBC5
-                    return new Mbc5(romData, ramSize, false);
-                
                 case 0x1A: // MBC5 + RAM
-                    return new Mbc5(romData, ramSize, false);
-                
+                    return new Mbc5(romData, ramSize, hasRumble: false, hasBattery: false);
+
                 case 0x1B: // MBC5 + RAM + Battery
-                    return new Mbc5(romData, ramSize, false);
-                
+                    return new Mbc5(romData, ramSize, hasRumble: false, hasBattery: true);
+
                 case 0x1C: // MBC5 + Rumble
-                    return new Mbc5(romData, ramSize, true);
-                
                 case 0x1D: // MBC5 + Rumble + RAM
-                    return new Mbc5(romData, ramSize, true);
-                
+                    return new Mbc5(romData, ramSize, hasRumble: true, hasBattery: false);
+
                 case 0x1E: // MBC5 + Rumble + RAM + Battery
-                    return new Mbc5(romData, ramSize, true);
-                
+                    return new Mbc5(romData, ramSize, hasRumble: true, hasBattery: true);
+
                 default:
                     Log.Warning($"Unsupported cartridge type 0x{cartridgeType:X2}, falling back to ROM-only");
                     return new RomOnly(romData);

@@ -263,5 +263,39 @@ namespace GameboySharp
             _dutyCycle = 0;
             _dutyPosition = 0;
         }
+
+        public override void SaveState(System.IO.BinaryWriter writer)
+        {
+            base.SaveState(writer);
+            writer.Write(_sweepPeriod);
+            writer.Write(_sweepCounter);
+            writer.Write(_sweepShift);
+            writer.Write(_sweepDirection);
+            writer.Write(_sweepEnabled);
+            writer.Write(_frequency);
+            writer.Write(_frequencyTimer);
+            writer.Write(_frequencyTimerPeriod);
+            writer.Write(_shadowFrequency);
+            writer.Write(_dutyCycle);
+            writer.Write(_dutyPosition);
+            writer.Write(_lengthValue);
+        }
+
+        public override void LoadState(System.IO.BinaryReader reader)
+        {
+            base.LoadState(reader);
+            _sweepPeriod = reader.ReadInt32();
+            _sweepCounter = reader.ReadInt32();
+            _sweepShift = reader.ReadInt32();
+            _sweepDirection = reader.ReadInt32();
+            _sweepEnabled = reader.ReadBoolean();
+            _frequency = reader.ReadInt32();
+            _frequencyTimer = reader.ReadInt32();
+            _frequencyTimerPeriod = reader.ReadInt32();
+            _shadowFrequency = reader.ReadInt32();
+            _dutyCycle = reader.ReadInt32();
+            _dutyPosition = reader.ReadInt32();
+            _lengthValue = reader.ReadInt32();
+        }
     }
 }

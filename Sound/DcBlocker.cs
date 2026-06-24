@@ -41,5 +41,17 @@ namespace GameboySharp
             _previousInput = 0f;
             _previousOutput = 0f;
         }
+
+        public void SaveState(System.IO.BinaryWriter writer)
+        {
+            writer.Write(_previousInput);
+            writer.Write(_previousOutput);
+        }
+
+        public void LoadState(System.IO.BinaryReader reader)
+        {
+            _previousInput = reader.ReadSingle();
+            _previousOutput = reader.ReadSingle();
+        }
     }
 }

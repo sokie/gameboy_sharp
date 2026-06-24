@@ -69,6 +69,9 @@ namespace GameboySharp
             _gl.ClearColor(0.2f, 0.2f, 0.25f, 1.0f);
             _gl.Clear(ClearBufferMask.ColorBufferBit);
 
+            // Select this window's ImGui context before use — the game window runs a second controller,
+            // and ImGui's current context is process-global (see GameWindow.OnRender for the full note).
+            _imGuiController.MakeCurrent();
             _imGuiController.Update((float)delta);
 
             // Enable Docking and create the main viewport dock space
@@ -152,9 +155,11 @@ namespace GameboySharp
                     ImGui.TextWrapped($"Desc: {_emulator.Cpu.LastExecutedOpcode.Description}");
                     ImGui.Text($"Cycles: {_emulator.Cpu.LastExecutedOpcode.Cycles} | Bytes: {_emulator.Cpu.LastExecutedOpcode.Bytes}");
                 }
-
-                ImGui.End();
             }
+
+            // ImGui.End() must be called for every Begin(), even when Begin() returns false (i.e. the
+            // window is collapsed) — otherwise ImGui asserts "Missing End()" and aborts.
+            ImGui.End();
         }
 
         private unsafe void DrawPPUPanel()
@@ -322,8 +327,10 @@ namespace GameboySharp
 
                         ImGui.EndTabBar();
                     }
-                ImGui.End();
             }
+
+            // End() runs unconditionally (see DrawCpuPanel) so a collapsed window doesn't abort ImGui.
+            ImGui.End();
         }
 
         private void DrawSerialPanel()
@@ -342,8 +349,10 @@ namespace GameboySharp
                     ImGui.SetScrollHereY(1.0f);
                 }
                 ImGui.EndChild();
-                ImGui.End();
             }
+
+            // End() runs unconditionally (see DrawCpuPanel) so a collapsed window doesn't abort ImGui.
+            ImGui.End();
         }
 
         private unsafe void InitializeGpuTextures()

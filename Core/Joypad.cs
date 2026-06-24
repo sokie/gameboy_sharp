@@ -1,5 +1,4 @@
 ﻿using Serilog;
-using Silk.NET.Input;
 
 namespace GameboySharp
 {
@@ -17,6 +16,17 @@ namespace GameboySharp
         public Joypad(Cpu cpu)
         {
             _cpu = cpu;
+        }
+
+        /// <summary>
+        /// Clears all button state back to "nothing pressed" for a machine reset. The P1 select bits
+        /// return to their power-on value (0xCF = no group selected, all buttons released).
+        /// </summary>
+        public void Reset()
+        {
+            _up = _down = _left = _right = false;
+            _a = _b = _start = _select = false;
+            _p1Register = 0xCF;
         }
 
         // This method will be called by the MMU when the game writes to 0xFF00
@@ -55,33 +65,44 @@ namespace GameboySharp
             return result;
         }
 
-        // This method will be called from our main loop to poll the keyboard
-        public void Update(IKeyboard keyboard)
+        /// <summary>
+        /// Sets the pressed/released state of all eight buttons at once. The input layer
+        /// (<see cref="InputManager"/>) computes these from the user's key/gamepad bindings and calls
+        /// this every frame, which keeps the joypad free of any knowledge about input devices.
+        /// </summary>
+        public void SetButtonStates(bool up, bool down, bool left, bool right,
+                                    bool a, bool b, bool select, bool start)
         {
-            // Standard key mapping
             bool wasUp = _up, wasDown = _down, wasLeft = _left, wasRight = _right;
             bool wasA = _a, wasB = _b, wasStart = _start, wasSelect = _select;
 
-            _up = keyboard.IsKeyPressed(Key.Up);
-            _down = keyboard.IsKeyPressed(Key.Down);
-            _left = keyboard.IsKeyPressed(Key.Left);
-            _right = keyboard.IsKeyPressed(Key.Right);
+            _up = up; _down = down; _left = left; _right = right;
+            _a = a; _b = b; _select = select; _start = start;
 
-            _a = keyboard.IsKeyPressed(Key.Z);
-            _b = keyboard.IsKeyPressed(Key.X);
-            _start = keyboard.IsKeyPressed(Key.Enter);
-            _select = keyboard.IsKeyPressed(Key.ShiftRight);
-
-            // Check if any button was just pressed (state changed from false to true)
+            // A fresh press (high→low on the wire) requests a joypad interrupt on real hardware. That
+            // interrupt is currently disabled (a known issue, out of scope here), but we keep the edge
+            // detection so it's trivial to re-enable later.
             if ((!wasUp && _up) || (!wasDown && _down) || (!wasLeft && _left) || (!wasRight && _right) ||
                 (!wasA && _a) || (!wasB && _b) || (!wasStart && _start) || (!wasSelect && _select))
             {
-                // Request a joypad interrupt. This is essential for many games!
-                //TODO: broken atm
                 //_cpu.RequestInterrupt(Cpu.Interrupt.Joypad);
             }
         }
         
+        public void SaveState(System.IO.BinaryWriter writer)
+        {
+            writer.Write(_p1Register);
+            writer.Write(_up); writer.Write(_down); writer.Write(_left); writer.Write(_right);
+            writer.Write(_a); writer.Write(_b); writer.Write(_start); writer.Write(_select);
+        }
+
+        public void LoadState(System.IO.BinaryReader reader)
+        {
+            _p1Register = reader.ReadByte();
+            _up = reader.ReadBoolean(); _down = reader.ReadBoolean(); _left = reader.ReadBoolean(); _right = reader.ReadBoolean();
+            _a = reader.ReadBoolean(); _b = reader.ReadBoolean(); _start = reader.ReadBoolean(); _select = reader.ReadBoolean();
+        }
+
         public void DebugRender()
         {
             Log.Debug("--- Joypad State ---");

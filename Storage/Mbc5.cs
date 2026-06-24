@@ -1,3 +1,4 @@
+using System.IO;
 using Serilog;
 
 namespace GameboySharp
@@ -15,6 +16,7 @@ namespace GameboySharp
         private readonly int _romBankCount;
         private readonly int _ramBankCount;
         private readonly bool _hasRumble;
+        private readonly bool _hasBattery;
 
         // MBC5 registers
         private bool _ramEnabled = false;
@@ -26,13 +28,15 @@ namespace GameboySharp
         public int CurrentRomBank => _romBankNumber;
         public int CurrentRamBank => _ramBankNumber;
         public bool IsRumbleEnabled => _rumbleEnabled;
+        public bool HasBattery => _hasBattery;
 
-        public Mbc5(byte[] romData, int ramSize, bool hasRumble = false)
+        public Mbc5(byte[] romData, int ramSize, bool hasRumble = false, bool hasBattery = false)
         {
             _romData = romData ?? throw new ArgumentNullException(nameof(romData));
             _romSize = romData.Length;
             _ramSize = ramSize;
             _hasRumble = hasRumble;
+            _hasBattery = hasBattery;
 
             // Calculate bank counts
             _romBankCount = _romSize / 0x4000; // 16KB per bank
@@ -213,6 +217,37 @@ namespace GameboySharp
             {
                 Log.Warning($"MBC5: RAM write out of bounds at address 0x{address:X4} (RAM address 0x{fullRamAddress:X6})");
             }
+        }
+
+        public byte[] GetRam() => _ramData;
+
+        public void SetRam(byte[] data)
+        {
+            if (data == null || _ramData.Length == 0) return;
+            Array.Copy(data, _ramData, Math.Min(data.Length, _ramData.Length));
+        }
+
+        public void SaveState(BinaryWriter writer)
+        {
+            writer.Write(_ramEnabled);
+            writer.Write(_romBankNumber);
+            writer.Write(_ramBankNumber);
+            writer.Write(_rumbleEnabled);
+
+            writer.Write(_ramData.Length);
+            writer.Write(_ramData);
+        }
+
+        public void LoadState(BinaryReader reader)
+        {
+            _ramEnabled = reader.ReadBoolean();
+            _romBankNumber = reader.ReadInt32();
+            _ramBankNumber = reader.ReadInt32();
+            _rumbleEnabled = reader.ReadBoolean();
+
+            int ramLength = reader.ReadInt32();
+            byte[] ram = reader.ReadBytes(ramLength);
+            SetRam(ram);
         }
     }
 }

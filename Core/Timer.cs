@@ -28,6 +28,45 @@ namespace GameboySharp
             _tac = 0x00;
         }
 
+        /// <summary>
+        /// Restores the timer to its power-on state. Mirrors the constructor so a machine reset and
+        /// a fresh boot leave the timer identical.
+        /// </summary>
+        public void Reset()
+        {
+            _divCounter = 0;
+            _timaCounter = 0;
+            _div = 0x00;
+            _tima = 0x00;
+            _tma = 0x00;
+            _tac = 0x00;
+        }
+
+        /// <summary>
+        /// Writes the timer's full state to a save state, including the internal cycle accumulators
+        /// (<see cref="_divCounter"/>/<see cref="_timaCounter"/>) — without those, TIMA's sub-tick
+        /// position would be lost and timing would drift after a reload.
+        /// </summary>
+        public void SaveState(System.IO.BinaryWriter writer)
+        {
+            writer.Write(_divCounter);
+            writer.Write(_timaCounter);
+            writer.Write(_div);
+            writer.Write(_tima);
+            writer.Write(_tma);
+            writer.Write(_tac);
+        }
+
+        public void LoadState(System.IO.BinaryReader reader)
+        {
+            _divCounter = reader.ReadInt32();
+            _timaCounter = reader.ReadInt32();
+            _div = reader.ReadByte();
+            _tima = reader.ReadByte();
+            _tma = reader.ReadByte();
+            _tac = reader.ReadByte();
+        }
+
         // Timer register read methods
         public byte ReadDIV() => _div;
         public byte ReadTIMA() => _tima;

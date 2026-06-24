@@ -1,3 +1,4 @@
+using System.IO;
 using Serilog;
 
 namespace GameboySharp
@@ -12,6 +13,7 @@ namespace GameboySharp
         public bool IsRamEnabled => false;
         public int CurrentRomBank => 0;
         public int CurrentRamBank => 0;
+        public bool HasBattery => false;
 
         public RomOnly(byte[] romData)
         {
@@ -47,5 +49,15 @@ namespace GameboySharp
         {
             // No RAM present, ignore writes
         }
+
+        // A ROM-only cartridge has no battery RAM and no banking registers, so there is nothing
+        // to expose or to persist. These are empty by design (see IMbc for the contract).
+        public byte[] GetRam() => System.Array.Empty<byte>();
+
+        public void SetRam(byte[] data) { /* No RAM to restore. */ }
+
+        public void SaveState(BinaryWriter writer) { /* No mutable state. */ }
+
+        public void LoadState(BinaryReader reader) { /* No mutable state. */ }
     }
 }

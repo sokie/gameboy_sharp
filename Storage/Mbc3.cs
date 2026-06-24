@@ -1,3 +1,4 @@
+using System.IO;
 using Serilog;
 
 namespace GameboySharp
@@ -14,6 +15,8 @@ namespace GameboySharp
         private readonly int _ramSize;
         private readonly int _romBankCount;
         private readonly int _ramBankCount;
+        private readonly bool _hasBattery;
+        private readonly bool _hasRtc;
 
         // MBC3 registers
         private bool _ramEnabled = false;
@@ -32,6 +35,10 @@ namespace GameboySharp
         public bool IsRamEnabled => _ramEnabled;
         public int CurrentRomBank => _romBankNumber;
         public int CurrentRamBank => _ramBankNumber;
+        public bool HasBattery => _hasBattery;
+
+        /// <summary>True for MBC3 cartridges that include the real-time clock (cartridge types 0x0F/0x10).</summary>
+        public bool HasRtc => _hasRtc;
         
         /// <summary>
         /// Gets detailed information about the MBC3 state including RTC
@@ -53,11 +60,13 @@ namespace GameboySharp
             return info;
         }
 
-        public Mbc3(byte[] romData, int ramSize)
+        public Mbc3(byte[] romData, int ramSize, bool hasBattery = false, bool hasRtc = false)
         {
             _romData = romData ?? throw new ArgumentNullException(nameof(romData));
             _romSize = romData.Length;
             _ramSize = ramSize;
+            _hasBattery = hasBattery;
+            _hasRtc = hasRtc;
 
             // Calculate bank counts
             _romBankCount = _romSize / 0x4000; // 16KB per bank
@@ -253,6 +262,109 @@ namespace GameboySharp
             {
                 Log.Warning($"MBC3: RAM write out of bounds at address 0x{address:X4} (RAM address 0x{fullRamAddress:X6})");
             }
+        }
+
+        public byte[] GetRam() => _ramData;
+
+        public void SetRam(byte[] data)
+        {
+            if (data == null || _ramData.Length == 0) return;
+            Array.Copy(data, _ramData, Math.Min(data.Length, _ramData.Length));
+        }
+
+        public void SaveState(BinaryWriter writer)
+        {
+            writer.Write(_ramEnabled);
+            writer.Write(_romBankNumber);
+            writer.Write(_ramBankNumber);
+            writer.Write(_rtcLatched);
+
+            // The RTC's latched register values plus its base time. The base time is the easy-to-miss
+            // part: it is what the live seconds/minutes/hours are derived from, so without it the
+            // clock would jump on reload.
+            writer.Write(_rtcSeconds);
+            writer.Write(_rtcMinutes);
+            writer.Write(_rtcHours);
+            writer.Write(_rtcDaysLow);
+            writer.Write(_rtcDaysHigh);
+            writer.Write(_rtcBaseTime.Ticks);
+
+            writer.Write(_ramData.Length);
+            writer.Write(_ramData);
+        }
+
+        public void LoadState(BinaryReader reader)
+        {
+            _ramEnabled = reader.ReadBoolean();
+            _romBankNumber = reader.ReadInt32();
+            _ramBankNumber = reader.ReadInt32();
+            _rtcLatched = reader.ReadBoolean();
+
+            _rtcSeconds = reader.ReadByte();
+            _rtcMinutes = reader.ReadByte();
+            _rtcHours = reader.ReadByte();
+            _rtcDaysLow = reader.ReadByte();
+            _rtcDaysHigh = reader.ReadByte();
+            _rtcBaseTime = new DateTime(reader.ReadInt64());
+
+            int ramLength = reader.ReadInt32();
+            byte[] ram = reader.ReadBytes(ramLength);
+            SetRam(ram);
+        }
+
+        /// <summary>
+        /// Writes the RTC state in the BGB/VBA <c>.sav</c> footer layout: ten little-endian 32-bit
+        /// registers (the live clock followed by the latched copy) and a 64-bit Unix timestamp of the
+        /// moment of saving. The timestamp lets a loader advance the clock by however long the cartridge
+        /// was "powered off".
+        /// </summary>
+        public void WriteRtcSave(System.IO.BinaryWriter writer)
+        {
+            // Live registers, derived from the base time (independent of the latch).
+            long total = (long)(DateTime.Now - _rtcBaseTime).TotalSeconds;
+            if (total < 0) total = 0;
+            writer.Write((uint)(total % 60));
+            writer.Write((uint)((total / 60) % 60));
+            writer.Write((uint)((total / 3600) % 24));
+            long days = total / 86400;
+            writer.Write((uint)(days & 0xFF));
+            writer.Write((uint)((days >> 8) & 0x01));
+
+            // Latched registers (the snapshot the game last read).
+            writer.Write((uint)_rtcSeconds);
+            writer.Write((uint)_rtcMinutes);
+            writer.Write((uint)_rtcHours);
+            writer.Write((uint)_rtcDaysLow);
+            writer.Write((uint)_rtcDaysHigh);
+
+            writer.Write(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        }
+
+        /// <summary>Restores RTC state previously written by <see cref="WriteRtcSave"/>.</summary>
+        public void ReadRtcSave(System.IO.BinaryReader reader)
+        {
+            uint realSeconds = reader.ReadUInt32();
+            uint realMinutes = reader.ReadUInt32();
+            uint realHours = reader.ReadUInt32();
+            uint realDaysLow = reader.ReadUInt32();
+            uint realDaysHigh = reader.ReadUInt32();
+
+            _rtcSeconds = (byte)(reader.ReadUInt32() & 0x3F);
+            _rtcMinutes = (byte)(reader.ReadUInt32() & 0x3F);
+            _rtcHours = (byte)(reader.ReadUInt32() & 0x1F);
+            _rtcDaysLow = (byte)(reader.ReadUInt32() & 0xFF);
+            _rtcDaysHigh = (byte)(reader.ReadUInt32() & 0x01);
+
+            long savedTimestamp = reader.ReadInt64();
+
+            // Reconstruct the base time so the live clock reads the saved live value plus however much
+            // real time has elapsed since the save (a real RTC keeps ticking while powered off).
+            long savedRealTotal = realSeconds + realMinutes * 60L + realHours * 3600L
+                                  + ((realDaysLow | ((long)realDaysHigh << 8)) * 86400L);
+            long elapsedWhileOff = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - savedTimestamp;
+            if (elapsedWhileOff < 0) elapsedWhileOff = 0;
+
+            _rtcBaseTime = DateTime.Now.AddSeconds(-(savedRealTotal + elapsedWhileOff));
         }
 
         private void UpdateRtcRegisters()

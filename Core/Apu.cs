@@ -65,6 +65,23 @@ namespace GameboySharp
         private byte _nr51; // 0xFF25 - Sound output terminal selection
         private byte _nr52; // 0xFF26 - Sound on/off
 
+        // --- Emulator-level output controls (not part of the Game Boy hardware) ---
+        // These sit on top of the GB's own NR50 volume so the user can set a master gain, mute
+        // everything, or silence individual channels from the Settings dialog. They are applied at
+        // the very end of the mix, just before the signal is converted to 16-bit samples.
+
+        /// <summary>Master output gain, 0.0 (silent) to 1.0 (unattenuated). Multiplies the final mix.</summary>
+        public float MasterVolume { get; set; } = 1.0f;
+
+        /// <summary>Global mute. When true the output is silenced regardless of <see cref="MasterVolume"/>.</summary>
+        public bool Muted { get; set; } = false;
+
+        // Per-channel mutes (pulse A, pulse B, wave, noise). A muted channel is dropped from the mix.
+        public bool MuteChannel1 { get; set; } = false;
+        public bool MuteChannel2 { get; set; } = false;
+        public bool MuteChannel3 { get; set; } = false;
+        public bool MuteChannel4 { get; set; } = false;
+
         /// <param name="sampleRate">
         /// Host output rate in Hz, normally the audio device's native rate. Defaults to 44100
         /// so existing callers (and the test suite) keep working unchanged.
@@ -83,6 +100,90 @@ namespace GameboySharp
             _nr52 = 0x00; // APU disabled initially
             _nr50 = 0x00; // Master volume at minimum
             _nr51 = 0x00; // All channels disabled
+        }
+
+        /// <summary>
+        /// Restores the APU to its power-on state for a machine reset. The four channels are rebuilt
+        /// from scratch (the simplest way to guarantee a pristine state for every latch they hold),
+        /// the DC-blocking filters are cleared so playback resumes from silence, and the frame
+        /// sequencer and master registers return to zero. The <see cref="AudioBufferReady"/> callback
+        /// lives on the APU itself, so it survives the reset and keeps feeding the same audio device.
+        /// </summary>
+        public void Reset()
+        {
+            _channel1 = new PulseWithSweepChannel();
+            _channel2 = new PulseChannel();
+            _channel3 = new WaveChannel();
+            _channel4 = new NoiseChannel();
+
+            _channel1Filter.Reset();
+            _channel2Filter.Reset();
+            _channel3Filter.Reset();
+            _channel4Filter.Reset();
+            _leftOutputFilter.Reset();
+            _rightOutputFilter.Reset();
+
+            _frameSequencerCounter = 0;
+            _frameSequencerStep = 0;
+            _apuCycleCounter = 0;
+            _bufferIndex = 0;
+
+            _nr50 = 0x00;
+            _nr51 = 0x00;
+            _nr52 = 0x00;
+        }
+
+        /// <summary>
+        /// Writes the APU's full state to a save state: the frame-sequencer position (step + counter),
+        /// the master control registers, the four channels, and the six DC-blocking filters. The
+        /// frame-sequencer step is the easy-to-miss latch — it decides which of length/envelope/sweep
+        /// ticks next, so losing it would desync every channel's timing after a reload.
+        /// </summary>
+        public void SaveState(BinaryWriter writer)
+        {
+            writer.Write(_frameSequencerCounter);
+            writer.Write(_frameSequencerStep);
+            writer.Write(_nr50);
+            writer.Write(_nr51);
+            writer.Write(_nr52);
+            writer.Write(_apuCycleCounter);
+            writer.Write(_bufferIndex);
+
+            _channel1.SaveState(writer);
+            _channel2.SaveState(writer);
+            _channel3.SaveState(writer);
+            _channel4.SaveState(writer);
+
+            _channel1Filter.SaveState(writer);
+            _channel2Filter.SaveState(writer);
+            _channel3Filter.SaveState(writer);
+            _channel4Filter.SaveState(writer);
+            _leftOutputFilter.SaveState(writer);
+            _rightOutputFilter.SaveState(writer);
+        }
+
+        public void LoadState(BinaryReader reader)
+        {
+            _frameSequencerCounter = reader.ReadInt32();
+            _frameSequencerStep = reader.ReadInt32();
+            _nr50 = reader.ReadByte();
+            _nr51 = reader.ReadByte();
+            _nr52 = reader.ReadByte();
+            _apuCycleCounter = reader.ReadDouble();
+            // Clamp the buffer index so a stale/corrupt file can never overflow the output buffer.
+            _bufferIndex = Math.Clamp(reader.ReadInt32(), 0, BufferSize - 1);
+
+            _channel1.LoadState(reader);
+            _channel2.LoadState(reader);
+            _channel3.LoadState(reader);
+            _channel4.LoadState(reader);
+
+            _channel1Filter.LoadState(reader);
+            _channel2Filter.LoadState(reader);
+            _channel3Filter.LoadState(reader);
+            _channel4Filter.LoadState(reader);
+            _leftOutputFilter.LoadState(reader);
+            _rightOutputFilter.LoadState(reader);
         }
 
         /// <summary>
@@ -153,10 +254,17 @@ namespace GameboySharp
 
                 // 1. Get sample from each channel, individually DC-blocked so a channel's
                 //    idle/disabled transition no longer pops the mix (see field comments).
+                //    We still run the filter for muted channels (to keep their state continuous, so
+                //    un-muting doesn't pop) but drop their contribution from the mix afterwards.
                 float sample1 = _channel1Filter.Process(_channel1.GetSample());
                 float sample2 = _channel2Filter.Process(_channel2.GetSample());
                 float sample3 = _channel3Filter.Process(_channel3.GetSample());
                 float sample4 = _channel4Filter.Process(_channel4.GetSample());
+
+                if (MuteChannel1) sample1 = 0f;
+                if (MuteChannel2) sample2 = 0f;
+                if (MuteChannel3) sample3 = 0f;
+                if (MuteChannel4) sample4 = 0f;
 
                 // 2. Mix samples for left and right outputs based on NR51 register
                 float mixedLeft = 0.0f;
@@ -189,6 +297,11 @@ namespace GameboySharp
 
                 float processedLeft = avgLeft * ((leftVolume + 1) / 8.0f);
                 float processedRight = avgRight * ((rightVolume + 1) / 8.0f);
+
+                // 4b. Apply the emulator's own master gain / mute on top of the GB's NR50 volume.
+                float masterGain = Muted ? 0f : MasterVolume;
+                processedLeft *= masterGain;
+                processedRight *= masterGain;
 
                 // 5. Apply the output DC blocking high-pass filter (final safety net)
                 processedLeft = _leftOutputFilter.Process(processedLeft);
