@@ -1,0 +1,33 @@
+name: CI
+
+# Builds and tests on every push/PR to main. The test suite is fully headless: the audio tests use a
+# capturing test-double (no audio device), and the save-state/reset determinism tests skip unless
+# GBSHARP_TEST_ROM points at a ROM — so no display, GPU, or ROM is needed here.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Restore
+        run: dotnet restore GameboySharp.sln
+
+      - name: Build
+        run: dotnet build GameboySharp.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test GameboySharp.sln -c Release --no-build --verbosity normal
