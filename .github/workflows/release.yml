@@ -65,18 +65,37 @@ jobs:
             -p:DebugSymbols=false \
             -o publish
 
-      # Lay the bundle out under a single top-level folder so the archive extracts cleanly.
-      - name: Stage bundle
+      # macOS: wrap the published payload in a real, double-clickable .app bundle and ad-hoc sign it.
+      # Ad-hoc signing is free (no certificate) and makes macOS treat the app as validly signed so it
+      # won't refuse to open it as "damaged". It is NOT notarization — users still clear Gatekeeper
+      # once on first launch (the README documents the one-liner).
+      - name: Bundle macOS .app
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          APP="GameboySharp.app"
+          mkdir -p "$APP/Contents/MacOS"
+          sed "s/__VERSION__/${VERSION#v}/g" build/macos/Info.plist > "$APP/Contents/Info.plist"
+          cp -R publish/. "$APP/Contents/MacOS/"
+          chmod +x "$APP/Contents/MacOS/GameboySharp"
+          codesign --force --deep --sign - "$APP"
+          mkdir "${{ matrix.artifact_name }}"
+          mv "$APP" "${{ matrix.artifact_name }}/"
+          cp README.md LICENSE "${{ matrix.artifact_name }}/" 2>/dev/null || true
+
+      # Linux/Windows: ship the self-contained folder as-is under a single top-level directory.
+      - name: Stage bundle (Linux/Windows)
+        if: runner.os != 'macOS'
         shell: bash
         run: |
           cp README.md LICENSE publish/ 2>/dev/null || true
+          [ -f publish/GameboySharp ] && chmod +x publish/GameboySharp || true
           mv publish "${{ matrix.artifact_name }}"
 
       - name: Create archive (Unix)
         if: runner.os != 'Windows'
-        run: |
-          chmod +x "${{ matrix.artifact_name }}/GameboySharp" || true
-          tar -czf "${{ matrix.artifact_name }}-${{ steps.get_version.outputs.VERSION }}.${{ matrix.archive_ext }}" "${{ matrix.artifact_name }}"
+        run: tar -czf "${{ matrix.artifact_name }}-${{ steps.get_version.outputs.VERSION }}.${{ matrix.archive_ext }}" "${{ matrix.artifact_name }}"
 
       - name: Create archive (Windows)
         if: runner.os == 'Windows'

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Bundle metadata for the macOS .app. The release workflow substitutes __VERSION__ with the tag. -->
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>GameboySharp</string>
+    <key>CFBundleDisplayName</key>
+    <string>GameboySharp</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.gameboysharp.emulator</string>
+    <key>CFBundleVersion</key>
+    <string>__VERSION__</string>
+    <key>CFBundleShortVersionString</key>
+    <string>__VERSION__</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <!-- The executable inside Contents/MacOS that gets launched. -->
+    <key>CFBundleExecutable</key>
+    <string>GameboySharp</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>12.0</string>
+    <!-- Crisp pixels on Retina displays (important for a pixel-art emulator). -->
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.games</string>
+</dict>
+</plist>

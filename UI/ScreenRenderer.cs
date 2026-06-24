@@ -54,9 +54,13 @@ namespace GameboySharp
                 _gl.BufferData(BufferTargetARB.ElementArrayBuffer, (uint)(_indices.Length * sizeof(uint)), p, BufferUsageARB.StaticDraw);
             }
             // --- Shader Setup ---
-            // Assumes shaders are in a "shaders" folder and set to "Copy if newer"
-            var vertexSource = File.ReadAllText("shaders/screen.vert");
-            var fragmentSource = File.ReadAllText("shaders/screen.frag");
+            // Load the shaders from the "shaders" folder next to the executable (AppContext.BaseDirectory)
+            // rather than the current working directory. This matters because a launched app doesn't
+            // necessarily run from its own folder — most importantly, a macOS .app double-clicked in
+            // Finder runs with the working directory set to "/", which would break a relative path.
+            string shaderDir = Path.Combine(AppContext.BaseDirectory, "shaders");
+            var vertexSource = File.ReadAllText(Path.Combine(shaderDir, "screen.vert"));
+            var fragmentSource = File.ReadAllText(Path.Combine(shaderDir, "screen.frag"));
             _shaderProgram = CreateShaderProgram(vertexSource, fragmentSource);
 
             // Cache the scanline uniform location so Render can toggle the effect cheaply.

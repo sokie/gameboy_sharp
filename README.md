@@ -59,6 +59,27 @@ Cross-platform support Windows, macOS, or Linux (via Silk.NET)
 - **Recent ROMs**, drag-and-drop ROM loading, an in-app file browser, and optional pause-on-focus-loss
 - **Persistent configuration** — key bindings, audio/video preferences, recent ROMs, and window size are remembered between sessions
 
+## Downloads
+
+Pre-built, **self-contained** bundles for Windows, Linux, and macOS (Intel & Apple Silicon) are
+attached to each [GitHub Release](../../releases) — no .NET install required. Download the archive
+for your platform, extract it, and run the `GameboySharp` executable (or `GameboySharp.app` on macOS).
+These are produced automatically by the release workflow (see [CI/CD](#cicd)).
+
+### macOS: one-time Gatekeeper step
+
+The macOS app is **not notarized** (notarization requires a paid Apple Developer account), so Gatekeeper
+blocks it on first launch. Clear the quarantine flag once and it opens normally afterwards:
+
+```bash
+xattr -cr /path/to/GameboySharp.app
+```
+
+Alternatively, right-click the app → **Open** → **Open** the first time. Either way it's a one-time step.
+
+> **Windows** shows a similar SmartScreen prompt for unsigned apps — click **More info → Run anyway**.
+> **Linux** has no such gate; just `chmod +x GameboySharp` if needed and run it.
+
 ## Requirements
 
 ### Runtime Requirements
@@ -260,6 +281,23 @@ dotnet run --project AudioHarness -- tone        # play an audible 440 Hz tone
 dotnet run --project AudioHarness -- resample    # offline resample correctness (PASS/FAIL)
 dotnet run --project AudioHarness -- recover     # buffer-underrun auto-recovery (PASS/FAIL)
 dotnet run --project AudioHarness -- play <rom>  # play a real game's audio, headless
+```
+
+## CI/CD
+
+Two GitHub Actions workflows live in `.github/workflows/`:
+
+- **`ci.yml`** — builds and runs the test suite on every push / PR to `main` (fully headless on Linux).
+- **`release.yml`** — on pushing a version tag (`vX.Y.Z`), cross-builds **self-contained** bundles for
+  Windows (`win-x64`), Linux (`linux-x64`), and macOS (`osx-x64` + `osx-arm64`), packages each
+  (`.zip` on Windows, `.tar.gz` elsewhere, with a double-clickable `.app` on macOS), and attaches them
+  to an auto-generated GitHub Release.
+
+Cut a release by pushing a tag:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
 ## Project Structure
