@@ -793,9 +793,14 @@ namespace GameboySharp
             int g = (gbcColor >> 5) & 0b11111; // second 5 bits
             int b = (gbcColor >> 10) & 0b11111; // last 5 bits
 
-            byte r8 = (byte)((r * 255) / 31);
-            byte g8 = (byte)((g * 255) / 31);
-            byte b8 = (byte)((b * 255) / 31);
+            // Expand each 5-bit channel to 8 bits with the conventional GBC formula
+            // (value << 3) | (value >> 2): it maps 0 -> 0 and 31 -> 255 and replicates the high bits
+            // into the low ones. This is the formula the standard test-ROM reference screenshots are
+            // generated with, so CGB output compares pixel-exact against them. (The older (value*255)/31
+            // differs by +-1 in the mid-range, which is invisible on screen but breaks exact comparison.)
+            byte r8 = (byte)((r << 3) | (r >> 2));
+            byte g8 = (byte)((g << 3) | (g >> 2));
+            byte b8 = (byte)((b << 3) | (b >> 2));
 
             return (uint)(0xFF << 24 | b8 << 16 | g8 << 8 | r8);
         }

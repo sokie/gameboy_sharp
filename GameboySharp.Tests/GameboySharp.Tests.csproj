@@ -12,6 +12,9 @@
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
     <PackageReference Include="Xunit.SkippableFact" Version="1.5.61" />
+    <!-- Test-only (not shipped in the app): decodes reference PNGs for the screenshot ROM tests.
+         Pinned to the 2.1.x line, which is Apache-2.0; 3.x switched to a split licence. -->
+    <PackageReference Include="SixLabors.ImageSharp" Version="2.1.13" />
   </ItemGroup>
 
   <ItemGroup>

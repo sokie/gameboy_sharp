@@ -271,6 +271,42 @@ All 500 opcodes pass 100% of register/RAM checks (~500,000 cases in a couple of 
 HALT differ only in reported cycle count — a known modeling nuance for those two instructions that
 doesn't affect computed results.
 
+### Audio & PPU ROM tests — screenshot comparison
+
+Audio and graphics are validated against the community-standard
+[c-sp/game-boy-test-roms](https://github.com/c-sp/game-boy-test-roms) suite by rendering a fixed
+number of frames and comparing the framebuffer to a reference screenshot, **pixel for pixel**. Four
+ROMs are covered, spanning monochrome (DMG) and colour (CGB) hardware:
+
+| Test ROM    | Checks            | Status |
+|-------------|-------------------|--------|
+| `dmg-acid2` | DMG PPU rendering | Passes — pixel-exact |
+| `cgb-acid2` | CGB PPU rendering | Known gap — a band across the middle of the face renders wrong (CGB-only; the DMG path is correct) |
+| `dmg_sound` | APU (Blargg)      | Known gap — reports "Failed #4" (sub-tests 04+) |
+| `cgb_sound` | APU (Blargg)      | Known gap — reports "Failed #4" (sub-tests 04+) |
+
+The ROMs and reference images (~3.6 MB) are **not** committed. Download the
+`game-boy-test-roms-v7.0.zip` asset from the
+[v7.0 release](https://github.com/c-sp/game-boy-test-roms/releases/tag/v7.0) and extract it once (the
+archive unzips flat, co-locating each ROM with its reference PNG):
+
+```bash
+gh release download v7.0 --repo c-sp/game-boy-test-roms --pattern '*.zip'
+unzip game-boy-test-roms-v7.0.zip -d game-boy-test-roms
+```
+
+Then point `GBSHARP_TEST_ROMS_DIR` at the extracted folder to enable the otherwise-skipped tests:
+
+```bash
+GBSHARP_TEST_ROMS_DIR=game-boy-test-roms dotnet test
+```
+
+`dmg-acid2` must match its reference exactly — a regression there fails the build. The other three are
+**documented accuracy gaps**: each *skips* (rather than fails) while it still mismatches, and will
+automatically stop skipping the moment the emulator renders it correctly — a built-in nudge to lock
+the win in. The CGB colour-mode (`cgb-acid2`) and APU (`dmg_sound` / `cgb_sound`) gaps are the current
+accuracy backlog for this area.
+
 ### Audio validation harness
 
 `AudioHarness` exercises the SDL3 backend against a real audio device:
