@@ -33,7 +33,8 @@ namespace GameboySharp
     internal static class SaveState
     {
         private static readonly byte[] Magic = { (byte)'G', (byte)'B', (byte)'S', (byte)'S' };
-        private const int Version = 1;
+        // Version 2 added APU accuracy state (the sweep "negate used" latch); v1 states are rejected.
+        private const int Version = 2;
 
         // Thumbnails are the framebuffer downscaled by 2 (160x144 → 80x72) with nearest sampling.
         private const int ThumbnailWidth = GameboyConstants.ScreenWidth / 2;   // 80

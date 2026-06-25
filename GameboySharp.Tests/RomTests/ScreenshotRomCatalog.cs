@@ -97,9 +97,10 @@ internal static class ScreenshotRomCatalog
     /// <item><b>dmg-acid2</b> / <b>cgb-acid2</b> — both pass pixel-exact, covering the mono and colour
     /// PPU render paths.</item>
     /// <item><b>dmg_sound</b> / <b>cgb_sound</b> — Blargg APU suites captured at a fixed duration (they
-    /// loop forever). The channel-1 frequency sweep now passes, but these still fail overall on the
-    /// remaining APU gaps: the sweep "exit negate mode" quirk, the wave-RAM-access-while-on tests, and
-    /// (CGB only) some length/power edge cases.</item>
+    /// loop forever). The frequency-sweep and length/power sub-tests now pass (dmg_sound 9/12,
+    /// cgb_sound 11/12); the holdouts are the "wave RAM access while on" tests (09/10/12), which need
+    /// cycle-accurate wave-position timing this line-based APU doesn't model — so the combined ROMs
+    /// still don't fully pass.</item>
     /// </list>
     /// </summary>
     public static IReadOnlyList<ScreenshotRomCase> Cases { get; } = new[]

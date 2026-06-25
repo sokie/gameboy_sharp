@@ -171,6 +171,7 @@ namespace GameboySharp
         {
             _isGameBoyColor = true;
              _ppu.SetGbcMode(true);
+             _apu.SetGbcMode(true);
         }
 
         /// <summary>
@@ -509,6 +510,7 @@ namespace GameboySharp
             // GBC games) so that loading a DMG ROM after a GBC ROM at runtime correctly drops back to
             // monochrome mode rather than leaving the PPU in a stale GBC state.
             _ppu.SetGbcMode(_isGameBoyColor);
+            _apu.SetGbcMode(_isGameBoyColor);
 
             // Create appropriate MBC based on cartridge type
             _mbc = CreateMbc(header.CartridgeType, romData, header.RamSize);

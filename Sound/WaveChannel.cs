@@ -164,6 +164,30 @@ namespace GameboySharp
             return 0xFF;
         }
 
+        /// <summary>The byte address (0xFF30-0xFF3F) the channel is currently reading samples from.</summary>
+        private ushort CurrentByteAddress => (ushort)(0xFF30 + _wavePosition / 2);
+
+        /// <summary>
+        /// CPU read of wave RAM. On CGB, a read while the channel is playing is redirected to the byte
+        /// it is currently reading. (Real DMG reads back 0xFF outside a few-cycle access window; this
+        /// line-based APU doesn't model that window, and faking it would risk DMG games that stream
+        /// audio through wave RAM, so DMG reads are left direct.)
+        /// </summary>
+        public byte ReadWaveRam(ushort address, bool isGbcMode)
+        {
+            if (IsEnabled && isGbcMode)
+                address = CurrentByteAddress;
+            return ReadWaveTable(address);
+        }
+
+        /// <summary>CPU write of wave RAM, with the same CGB while-on redirect as <see cref="ReadWaveRam"/>.</summary>
+        public void WriteWaveRam(ushort address, byte value, bool isGbcMode)
+        {
+            if (IsEnabled && isGbcMode)
+                address = CurrentByteAddress;
+            WriteWaveTable(address, value);
+        }
+
         private int CalculateFrequencyTimerPeriod()
         {
             return (2048 - _frequency) * 2; // Wave channel uses 2x frequency

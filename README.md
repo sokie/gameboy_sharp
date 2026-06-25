@@ -282,8 +282,8 @@ ROMs are covered, spanning monochrome (DMG) and colour (CGB) hardware:
 |-------------|-------------------|--------|
 | `dmg-acid2` | DMG PPU rendering | Passes — pixel-exact |
 | `cgb-acid2` | CGB PPU rendering | Passes — pixel-exact |
-| `dmg_sound` | APU (Blargg)      | Partial — frequency sweep passes; wave-RAM-access and the sweep "exit negate mode" quirk still fail |
-| `cgb_sound` | APU (Blargg)      | Partial — as `dmg_sound`, plus some CGB-only length/power edge cases |
+| `dmg_sound` | APU (Blargg)      | Partial — 9/12 sub-tests pass; the wave-RAM-access-while-on tests (09/10/12) need cycle-accurate timing |
+| `cgb_sound` | APU (Blargg)      | Partial — 11/12 sub-tests pass; only wave read-while-on (09) remains |
 
 The ROMs and reference images (~3.6 MB) are **not** committed. Download the
 `game-boy-test-roms-v7.0.zip` asset from the
@@ -304,8 +304,9 @@ GBSHARP_TEST_ROMS_DIR=game-boy-test-roms dotnet test
 Both acid2 tests must match their reference exactly — a regression fails the build. The two Blargg
 sound tests are **documented accuracy gaps**: each *skips* (rather than fails) while it still
 mismatches, and will automatically stop skipping the moment the emulator renders it correctly — a
-built-in nudge to lock the win in. The remaining APU sub-tests — wave-RAM access timing, the sweep
-"exit negate mode" quirk, and some CGB length/power edge cases — are the current accuracy backlog.
+built-in nudge to lock the win in. The remaining APU sub-tests are the "wave RAM access while the
+channel is on" cases (09/10/12), which need cycle-accurate wave-position timing the line-based APU
+doesn't model — the current accuracy backlog for this area.
 
 ### Audio validation harness
 

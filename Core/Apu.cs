@@ -57,6 +57,11 @@ namespace GameboySharp
         private WaveChannel _channel3; // Wave
         private NoiseChannel _channel4; // Noise
 
+        // Whether the inserted cartridge runs the machine in Game Boy Color mode. A couple of APU
+        // behaviours around power-off (clearing the length counters, and whether the length registers
+        // stay writable while the APU is off) differ between DMG and CGB.
+        private bool _isGbcMode;
+
         internal bool IsLengthClockStep => (_frameSequencerStep % 2 == 0);
 
 
@@ -101,6 +106,9 @@ namespace GameboySharp
             _nr50 = 0x00; // Master volume at minimum
             _nr51 = 0x00; // All channels disabled
         }
+
+        /// <summary>Selects DMG or CGB behaviour for the mode-dependent APU quirks. Driven by the cartridge.</summary>
+        public void SetGbcMode(bool isGbc) => _isGbcMode = isGbc;
 
         /// <summary>
         /// Restores the APU to its power-on state for a machine reset. The four channels are rebuilt
@@ -359,7 +367,7 @@ namespace GameboySharp
             if (address >= 0xFF20 && address <= 0xFF23)
                 return _channel4.ReadRegister(address);
             if (address >= 0xFF30 && address <= 0xFF3F)
-                return _channel3.ReadWaveTable(address);
+                return _channel3.ReadWaveRam(address, _isGbcMode);
 
             return 0xFF;
         }
@@ -379,16 +387,22 @@ namespace GameboySharp
                 // When APU is turned OFF, all registers are cleared.
                 if (wasApuEnabled && !isApuNowEnabled)
                 {
-                    // Reset all registers and channels
-                    // Note: This logic seems to be slightly wrong in the original code.
-                    // When the APU is turned on, registers are not cleared.
-                    // When it is turned off, they are.
+                    // Turning the APU off clears every register and silences all channels.
                     _nr50 = 0;
                     _nr51 = 0;
                     _channel1.PowerOff();
                     _channel2.PowerOff();
                     _channel3.PowerOff();
                     _channel4.PowerOff();
+
+                    // On CGB (but not DMG) power-off also zeroes the length counters.
+                    if (_isGbcMode)
+                    {
+                        _channel1.ClearLengthCounter();
+                        _channel2.ClearLengthCounter();
+                        _channel3.ClearLengthCounter();
+                        _channel4.ClearLengthCounter();
+                    }
 
                     // Reset every DC filter so a later power-on starts from silence cleanly.
                     _channel1Filter.Reset();
@@ -408,22 +422,22 @@ namespace GameboySharp
                 return;
             }
 
-             // Wave RAM is always writable regardless of APU power state
+            // Wave RAM stays accessible regardless of APU power; while the channel is actively playing,
+            // though, access is restricted/redirected (see WaveChannel.WriteWaveRam).
             if (address >= 0xFF30 && address <= 0xFF3F)
             {
-                _channel3.WriteWaveTable(address, value);
+                _channel3.WriteWaveRam(address, value, _isGbcMode);
                 return;
             }
 
             bool isApuEnabled = (_nr52 & 0x80) != 0;
 
-            // The length register portion of NR11, NR21, NR31, NR41 is always writable.
-            // For simplicity, we can allow the whole register to be written.
+            // While the APU is off, most registers ignore writes. On DMG the length registers
+            // (NR11/NR21/NR31/NR41) stay writable; on CGB even those are blocked.
             bool isLengthRegister = address == 0xFF11 || address == 0xFF16 || address == 0xFF1B || address == 0xFF20;
 
-            if (!isApuEnabled && !isLengthRegister)
+            if (!isApuEnabled && (_isGbcMode || !isLengthRegister))
             {
-                // Don't allow writing to most registers if APU is off.
                 return;
             }
 

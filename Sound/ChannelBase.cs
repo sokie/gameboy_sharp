@@ -141,10 +141,17 @@ namespace GameboySharp
         /// </summary>
         public abstract void WriteRegister(ushort address, byte value, bool isApuEnabled, bool IsLengthClockStep);
 
+        /// <summary>
+        /// Zeroes the length counter. Powering the APU off does this on CGB but not on DMG (where the
+        /// counters survive), so the caller decides based on the hardware model.
+        /// </summary>
+        public void ClearLengthCounter() => _lengthCounter = 0;
+
         public virtual void PowerOff()
         {
             _lengthEnabled = false;
-            //_lengthCounter = 0;
+            // The length counter is intentionally NOT cleared here: on DMG it survives power-off. The
+            // APU clears it separately (via ClearLengthCounter) only in CGB mode.
             _envelopeEnabled = false;
             _envelopePeriod = 0;
             _envelopeCounter = 0;

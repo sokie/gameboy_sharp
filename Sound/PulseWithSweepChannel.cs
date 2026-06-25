@@ -14,6 +14,7 @@ namespace GameboySharp
         private int _sweepShift;
         private int _sweepDirection; // 0 = increase, 1 = decrease
         private bool _sweepEnabled;
+        private bool _sweepNegateUsed; // true once a calculation has run in negate mode since the last trigger
 
         // --- Frequency Generator ---
         private int _frequency;
@@ -41,6 +42,7 @@ namespace GameboySharp
             _sweepShift = 0;
             _sweepDirection = 0;
             _sweepEnabled = false;
+            _sweepNegateUsed = false;
             _frequency = 0;
             _frequencyTimer = 0;
             _frequencyTimerPeriod = 0;
@@ -90,6 +92,7 @@ namespace GameboySharp
             
             if (_sweepDirection == 1) // decrease
             {
+                _sweepNegateUsed = true; // remember a negate-mode calculation happened (see NR10 write)
                 newFreq = baseFrequency - offset;
             }
             else // increase
@@ -117,6 +120,7 @@ namespace GameboySharp
             // The sweep's internal enable flag is set when either the period or the shift is non-zero.
             _sweepEnabled = _sweepPeriod > 0 || _sweepShift > 0;
             _sweepCounter = (_sweepPeriod != 0) ? _sweepPeriod : 8;
+            _sweepNegateUsed = false; // cleared on trigger; the overflow calc below may set it again
 
             // On trigger, a non-zero shift performs one frequency calculation purely for the overflow
             // check (which can immediately disable the channel). Unlike the periodic sweep clock, the
@@ -182,8 +186,14 @@ namespace GameboySharp
             switch (address)
             {
                 case 0xFF10: // NR10 - Sweep
+                    int newDirection = (value >> 3) & 0x01;
+                    // Clearing the negate bit after a negate-mode calculation has run since the last
+                    // trigger immediately disables the channel — the quirk blargg's "05-sweep details"
+                    // checks. (_sweepNegateUsed is only ever set while in decrease mode.)
+                    if (_sweepNegateUsed && newDirection == 0)
+                        _enabled = false;
                     _sweepPeriod = (value >> 4) & 0x07;
-                    _sweepDirection = (value >> 3) & 0x01;
+                    _sweepDirection = newDirection;
                     _sweepShift = value & 0x07;
                     break;
 
@@ -233,6 +243,7 @@ namespace GameboySharp
             _sweepShift = 0;
             _sweepDirection = 0;
             _sweepEnabled = false;
+            _sweepNegateUsed = false;
             _frequency = 0;
             _frequencyTimer = 0;
             _frequencyTimerPeriod = 0;
@@ -249,6 +260,7 @@ namespace GameboySharp
             _sweepShift = 0;
             _sweepDirection = 0;
             _sweepEnabled = false;
+            _sweepNegateUsed = false;
             _frequency = 0;
             _frequencyTimer = 0;
             _frequencyTimerPeriod = 0;
@@ -264,6 +276,7 @@ namespace GameboySharp
             writer.Write(_sweepShift);
             writer.Write(_sweepDirection);
             writer.Write(_sweepEnabled);
+            writer.Write(_sweepNegateUsed);
             writer.Write(_frequency);
             writer.Write(_frequencyTimer);
             writer.Write(_frequencyTimerPeriod);
@@ -281,6 +294,7 @@ namespace GameboySharp
             _sweepShift = reader.ReadInt32();
             _sweepDirection = reader.ReadInt32();
             _sweepEnabled = reader.ReadBoolean();
+            _sweepNegateUsed = reader.ReadBoolean();
             _frequency = reader.ReadInt32();
             _frequencyTimer = reader.ReadInt32();
             _frequencyTimerPeriod = reader.ReadInt32();
