@@ -94,21 +94,20 @@ internal static class ScreenshotRomCatalog
     /// the <c>ExpectedToPass: false</c> cases are documented accuracy gaps that skip while they
     /// mismatch and self-promote once fixed (see <see cref="ScreenshotRomCase.ExpectedToPass"/>):
     /// <list type="bullet">
-    /// <item><b>dmg-acid2</b> — passes pixel-exact; the DMG render path is fully accurate.</item>
-    /// <item><b>cgb-acid2</b> — a band across the middle of the face renders wrong (~85% match). A
-    /// CGB-only PPU gap: dmg-acid2 passing shows the monochrome path is fine, so this is a colour-mode
-    /// rendering inaccuracy.</item>
-    /// <item><b>dmg_sound</b> / <b>cgb_sound</b> — Blargg APU suites captured at a fixed duration
-    /// (they loop forever). Both currently report "Failed #4" (sub-tests 04+ fail).</item>
+    /// <item><b>dmg-acid2</b> / <b>cgb-acid2</b> — both pass pixel-exact, covering the mono and colour
+    /// PPU render paths.</item>
+    /// <item><b>dmg_sound</b> / <b>cgb_sound</b> — Blargg APU suites captured at a fixed duration (they
+    /// loop forever). The channel-1 frequency sweep now passes, but these still fail overall on the
+    /// remaining APU gaps: the sweep "exit negate mode" quirk, the wave-RAM-access-while-on tests, and
+    /// (CGB only) some length/power edge cases.</item>
     /// </list>
     /// </summary>
     public static IReadOnlyList<ScreenshotRomCase> Cases { get; } = new[]
     {
         ScreenshotRomCase.Create("dmg-acid2", "dmg-acid2/dmg-acid2.gb",
             "dmg-acid2/dmg-acid2", GbMode.Dmg, frames: 60, expectedToPass: true),
-        // CGB PPU accuracy gap (see summary above): xfail until the colour-mode rendering is fixed.
         ScreenshotRomCase.Create("cgb-acid2", "cgb-acid2/cgb-acid2.gbc",
-            "cgb-acid2/cgb-acid2", GbMode.Cgb, frames: 60, expectedToPass: false),
+            "cgb-acid2/cgb-acid2", GbMode.Cgb, frames: 60, expectedToPass: true),
         ScreenshotRomCase.Create("dmg_sound", "blargg/dmg_sound/dmg_sound.gb",
             "blargg/dmg_sound/dmg_sound", GbMode.Dmg, frames: 2200, expectedToPass: false),
         ScreenshotRomCase.Create("cgb_sound", "blargg/cgb_sound/cgb_sound.gb",

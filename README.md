@@ -281,9 +281,9 @@ ROMs are covered, spanning monochrome (DMG) and colour (CGB) hardware:
 | Test ROM    | Checks            | Status |
 |-------------|-------------------|--------|
 | `dmg-acid2` | DMG PPU rendering | Passes — pixel-exact |
-| `cgb-acid2` | CGB PPU rendering | Known gap — a band across the middle of the face renders wrong (CGB-only; the DMG path is correct) |
-| `dmg_sound` | APU (Blargg)      | Known gap — reports "Failed #4" (sub-tests 04+) |
-| `cgb_sound` | APU (Blargg)      | Known gap — reports "Failed #4" (sub-tests 04+) |
+| `cgb-acid2` | CGB PPU rendering | Passes — pixel-exact |
+| `dmg_sound` | APU (Blargg)      | Partial — frequency sweep passes; wave-RAM-access and the sweep "exit negate mode" quirk still fail |
+| `cgb_sound` | APU (Blargg)      | Partial — as `dmg_sound`, plus some CGB-only length/power edge cases |
 
 The ROMs and reference images (~3.6 MB) are **not** committed. Download the
 `game-boy-test-roms-v7.0.zip` asset from the
@@ -301,11 +301,11 @@ Then point `GBSHARP_TEST_ROMS_DIR` at the extracted folder to enable the otherwi
 GBSHARP_TEST_ROMS_DIR=game-boy-test-roms dotnet test
 ```
 
-`dmg-acid2` must match its reference exactly — a regression there fails the build. The other three are
-**documented accuracy gaps**: each *skips* (rather than fails) while it still mismatches, and will
-automatically stop skipping the moment the emulator renders it correctly — a built-in nudge to lock
-the win in. The CGB colour-mode (`cgb-acid2`) and APU (`dmg_sound` / `cgb_sound`) gaps are the current
-accuracy backlog for this area.
+Both acid2 tests must match their reference exactly — a regression fails the build. The two Blargg
+sound tests are **documented accuracy gaps**: each *skips* (rather than fails) while it still
+mismatches, and will automatically stop skipping the moment the emulator renders it correctly — a
+built-in nudge to lock the win in. The remaining APU sub-tests — wave-RAM access timing, the sweep
+"exit negate mode" quirk, and some CGB length/power edge cases — are the current accuracy backlog.
 
 ### Audio validation harness
 

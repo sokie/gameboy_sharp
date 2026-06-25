@@ -423,12 +423,18 @@ namespace GameboySharp
             byte[] bgLineColorIndices = new byte[160]; // Store BG color index (0-3) for priority checks
             uint[] lineBuffer = new uint[160];
 
-            bool bgWindowMasterEnable = (_lcdc & 0b00000001) != 0;
+            // On the Game Boy Color, LCDC bit 0 is NOT a background on/off switch like it is on the DMG.
+            // The background and window are always drawn; the bit instead controls "master priority":
+            // when it is 0, objects are drawn on top of the BG/Window regardless of any priority bits
+            // (see the sprite step below). Blanking the BG here would be DMG behaviour and is wrong for
+            // CGB — it is exactly what cgb-acid2's "nose" section checks. (RenderBackground is the
+            // debug-only layer toggle and stays in effect.)
+            bool bgMasterPriority = (_lcdc & 0b00000001) != 0;
             bool spritesEnabled = (_lcdc & 0b00000010) != 0;
             bool windowEnabled = (_lcdc & 0b00100000) != 0;
 
-            // 1. Render Background (if enabled)
-            if (RenderBackground && bgWindowMasterEnable)
+            // 1. Render Background
+            if (RenderBackground)
             {
                 ushort bgTileMapAddress = ((_lcdc & 0b00001000) != 0) ? (ushort)0x9C00 : (ushort)0x9800;
                 int mapY = (_scy + _ly) % 256;
@@ -473,7 +479,8 @@ namespace GameboySharp
             }
             else
             {
-                // If BG is disabled, the line is white (color 0, palette 0)
+                // Only reached when the BG layer is hidden via the debug toggle: show white (color 0)
+                // and treat it as transparent so objects still appear.
                 uint white = GetGbcColor(0, 0, false);
                 for (int i = 0; i < 160; i++)
                 {
@@ -481,9 +488,10 @@ namespace GameboySharp
                     bgLineColorIndices[i] = 0; // BG is effectively transparent for priority
                 }
             }
-            
-            // 2. Render Window (if enabled and visible)
-            if (RenderWindow && bgWindowMasterEnable && windowEnabled && _ly >= _wy && _wx <= 166)
+
+            // 2. Render Window (if enabled and visible). Like the BG, the window is independent of LCDC
+            // bit 0 on CGB — only its own enable bit (LCDC bit 5) and visibility gate it.
+            if (RenderWindow && windowEnabled && _ly >= _wy && _wx <= 166)
             {
                 int windowXStart = _wx - 7;
                 ushort windowTileMapAddress = ((_lcdc & 0b01000000) != 0) ? (ushort)0x9C00 : (ushort)0x9800;
@@ -577,7 +585,13 @@ namespace GameboySharp
                             bool bgPixelIsOpaque = bgLineColorIndices[screenX] != 0;
                             bool bgTileHasPriority = bgLinePriorities[screenX] == 1;
 
-                            bool spriteBehindBg = (sprite.GbcBgPriority || (bgWindowMasterEnable && bgTileHasPriority)) && bgPixelIsOpaque;
+                            // The sprite sits behind the BG only over a non-zero BG pixel, when either
+                            // priority bit is set (the BG map attribute, or this object's OAM flag) — and
+                            // only while master priority (LCDC bit 0) is on. With it off, neither priority
+                            // bit counts and the object is always drawn on top.
+                            bool spriteBehindBg = bgMasterPriority
+                                                  && (sprite.GbcBgPriority || bgTileHasPriority)
+                                                  && bgPixelIsOpaque;
 
                             if (!spriteBehindBg)
                             {

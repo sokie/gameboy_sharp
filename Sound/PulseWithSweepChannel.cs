@@ -52,29 +52,33 @@ namespace GameboySharp
 
         public override void TickSweep()
         {
+            // The sweep timer always runs while the channel is on; decrement first, then act when it
+            // expires. Reloading and (separately) updating the frequency depend on the period.
+            _sweepCounter--;
+            if (_sweepCounter > 0) return;
+
+            // A period of 0 reloads the timer as if it were 8 — a hardware quirk blargg's "05-sweep
+            // details" checks. The frequency is only updated for an enabled, non-zero period; with a
+            // zero period the timer keeps running but does nothing.
+            _sweepCounter = (_sweepPeriod != 0) ? _sweepPeriod : 8;
             if (!_sweepEnabled || _sweepPeriod == 0) return;
 
-            _sweepCounter--;
-            if (_sweepCounter <= 0)
+            int newFreq = CalculateSweepFrequency(_shadowFrequency);
+            if (newFreq > 2047)
             {
-                _sweepCounter = (_sweepPeriod != 0) ? _sweepPeriod : 8;
+                _enabled = false;
+            }
+            else if (_sweepShift > 0)
+            {
+                _frequency = newFreq;
+                _shadowFrequency = newFreq;
+                _frequencyTimerPeriod = CalculateFrequencyTimerPeriod();
 
-                int newFreq = CalculateSweepFrequency(_shadowFrequency);
-                if (newFreq > 2047)
+                // A second calculation runs immediately for an extra overflow check, but its result
+                // is not written back to the frequency.
+                if (CalculateSweepFrequency(_shadowFrequency) > 2047)
                 {
                     _enabled = false;
-                }
-                else if (_sweepShift > 0)
-                {
-                    _frequency = newFreq;
-                    _shadowFrequency = newFreq;
-                    _frequencyTimerPeriod = CalculateFrequencyTimerPeriod();
-
-                    // Second overflow check
-                    if (CalculateSweepFrequency(_shadowFrequency) > 2047)
-                    {
-                        _enabled = false;
-                    }
                 }
             }
         }
@@ -110,28 +114,16 @@ namespace GameboySharp
             _dutyPosition = 0;
 
             _shadowFrequency = _frequency;
-            // If sweep period or shift is non-zero, sweep is enabled
+            // The sweep's internal enable flag is set when either the period or the shift is non-zero.
             _sweepEnabled = _sweepPeriod > 0 || _sweepShift > 0;
             _sweepCounter = (_sweepPeriod != 0) ? _sweepPeriod : 8;
 
-             // Immediate sweep write-back and second overflow check
-            if (_sweepShift > 0)
+            // On trigger, a non-zero shift performs one frequency calculation purely for the overflow
+            // check (which can immediately disable the channel). Unlike the periodic sweep clock, the
+            // result is NOT written back to the frequency.
+            if (_sweepShift > 0 && CalculateSweepFrequency(_shadowFrequency) > 2047)
             {
-                int newFreq = CalculateSweepFrequency(_shadowFrequency);
-                if (newFreq <= 2047)
-                {
-                    _frequency = newFreq;
-                    _shadowFrequency = newFreq;
-                    _frequencyTimerPeriod = CalculateFrequencyTimerPeriod();
-
-                    // Second (non-write-back) overflow check
-                    if (CalculateSweepFrequency(_shadowFrequency) > 2047)
-                        _enabled = false;
-                }
-                else
-                {
-                    _enabled = false;
-                }
+                _enabled = false;
             }
         }
 
